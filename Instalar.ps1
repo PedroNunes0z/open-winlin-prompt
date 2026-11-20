@@ -15,7 +15,15 @@ $TargetDir = 'C:\Program Files\open-winlin-prompt'
 $Model     = 'qwen2.5-coder:1.5b'
 
 function Test-Admin {
-    ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsRole]::Administrator)
+    try {
+        # usa o nome da função ('Administrator') em vez do enum WindowsRole,
+        # que nem sempre resolve em todos os ambientes do PowerShell
+        $principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
+        return $principal.IsInRole('Administrator')
+    } catch {
+        # fallback: SID do grupo Administradores (S-1-5-32-544)
+        return [bool]((whoami /groups) -match 'S-1-5-32-544')
+    }
 }
 
 function Ask([string]$Question) {
