@@ -1,4 +1,4 @@
-# Open Winlin Prompt — Configuração automática da IA local (Ollama)
+﻿# Open Winlin Prompt — Configuração automática da IA local (Ollama)
 # Faz tudo sozinho: libera o Ollama para o app, reinicia o Ollama e baixa o modelo.
 # Janela de progresso com Cancelar (e o X fecha/cancela).
 # Uso: duplo clique em "Configurar Ollama.cmd" ou:  powershell -ExecutionPolicy Bypass -File scripts\configurar-ollama.ps1

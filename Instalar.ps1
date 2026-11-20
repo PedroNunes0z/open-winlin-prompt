@@ -1,4 +1,4 @@
-# Open Winlin Prompt — Instalador
+﻿# Open Winlin Prompt — Instalador
 # Uso: duplo clique em "Instalar.cmd" ou:
 #   powershell -ExecutionPolicy Bypass -File Instalar.ps1
 #
