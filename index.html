@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <link rel="icon" href="./src/assets/img/logo.svg" />
+  <title>Open Winlin Prompt</title>
+</head>
+<body>
+<div id="app" class="app">
+  <header class="titlebar">
+    <div class="titlebar__brand">
+      <span class="app-mark" role="img" aria-label="Open Winlin Prompt" title="Open Winlin Prompt"></span>
+      <span class="app-title">Open Winlin Prompt</span>
+    </div>
+
+    <div class="titlebar__center">
+      <span class="titlebar__label">Projeto</span>
+      <fluent-dropdown id="projectSwitcher" class="project-switcher" aria-label="Projeto ativo"></fluent-dropdown>
+      <fluent-button id="newProjectBtn" appearance="transparent" class="icon-btn" title="Novo projeto (Ctrl+Shift+N)">
+        <span data-icon="folder-add"></span>
+      </fluent-button>
+      <div class="search-wrap">
+        <span class="search-wrap__icon" data-icon="search"></span>
+        <fluent-text-input id="searchInput" placeholder="Buscar arquivos e biblioteca..." aria-label="Buscar arquivos e biblioteca"></fluent-text-input>
+        <kbd>Ctrl K</kbd>
+      </div>
+    </div>
+
+    <div class="titlebar__actions">
+      <fluent-button id="importBtn" appearance="transparent" class="icon-btn" title="Importar workspace (.json)">
+        <span data-icon="arrow-import"></span>
+      </fluent-button>
+      <fluent-button id="exportBtn" appearance="transparent" class="icon-btn" title="Exportar workspace (.json)">
+        <span data-icon="arrow-export"></span>
+      </fluent-button>
+      <span class="titlebar__sep"></span>
+      <fluent-button id="settingsBtn" appearance="transparent" class="icon-btn" title="Configurações e temas">
+        <span data-icon="settings"></span>
+      </fluent-button>
+    </div>
+
+    <div id="settingsPanel" class="settings-panel" role="dialog" aria-label="Configurações de aparência">
+      <div class="settings-panel__title">Aparência</div>
+      <div class="settings-row">
+        <span>Modo</span>
+        <div class="segmented" id="modeSwitch">
+          <button type="button" data-mode="dark">Escuro</button>
+          <button type="button" data-mode="light">Claro</button>
+        </div>
+      </div>
+      <div class="settings-panel__title settings-panel__title--spaced">Cor de destaque</div>
+      <div class="swatches" id="accentSwatches">
+        <button type="button" class="swatch" data-accent="blue" title="Azul" style="--swatch:#60cdff;--swatch-soft:#c9ecff"><span>Azul</span></button>
+        <button type="button" class="swatch" data-accent="purple" title="Roxo" style="--swatch:#b48cff;--swatch-soft:#e0d1ff"><span>Roxo</span></button>
+        <button type="button" class="swatch" data-accent="teal" title="Verde-azulado" style="--swatch:#4dd0c1;--swatch-soft:#b9ede6"><span>Turquesa</span></button>
+        <button type="button" class="swatch" data-accent="green" title="Verde" style="--swatch:#6ccb8f;--swatch-soft:#c5eed4"><span>Verde</span></button>
+        <button type="button" class="swatch" data-accent="orange" title="Laranja" style="--swatch:#ffab70;--swatch-soft:#ffdcbd"><span>Laranja</span></button>
+        <button type="button" class="swatch" data-accent="pink" title="Rosa" style="--swatch:#ff8fc7;--swatch-soft:#ffc9e2"><span>Rosa</span></button>
+      </div>
+      <div class="settings-panel__title settings-panel__title--spaced">Sugestões de escrita</div>
+      <p class="ai-desc">A IA roda no seu computador (Ollama) e sugere o próximo trecho enquanto você escreve. Nada é enviado para a internet.</p>
+      <div class="ai-model">
+        <div class="ai-model__row">
+          <span class="ai-model__icon" data-icon="sparkle"></span>
+          <div>
+            <div class="ai-model__name">Qwen2.5-Coder 1.5B</div>
+            <div class="ai-model__meta">≈ 986 MB · usa 1,4–1,8 GB de memória · funciona offline</div>
+          </div>
+        </div>
+        <div id="aiModelStatus" class="ai-status">Verificando...</div>
+        <div id="aiFixBox" class="ai-fix hidden">
+          <div class="ai-fix__title">Configuração automática</div>
+          <p class="ai-fix__note">O navegador não pode executar programas, então a configuração roda num <b>script</b>: clique abaixo para baixá-lo e <b>execute o arquivo baixado</b> (duplo clique). Uma janela de progresso abre e faz tudo sozinho — libera o Ollama, reinicia e baixa o modelo. Você pode cancelar ou fechar a janela a qualquer hora.</p>
+          <div class="ai-fix__cmd">
+            <fluent-button id="aiAutoFixBtn" appearance="accent">Baixar script de configuração</fluent-button>
+          </div>
+          <div class="ai-fix__cmd ai-fix__cmd--manual">
+            <code>setx OLLAMA_ORIGINS "*"</code>
+            <button type="button" class="mini-btn" id="aiCopyFixBtn">Copiar</button>
+          </div>
+          <p class="ai-fix__note">Prefere fazer na mão? Copie o comando, feche o Ollama, rode no PowerShell e abra o Ollama de novo.</p>
+        </div>
+        <fluent-progress-bar id="aiProgress" class="hidden" min="0" max="100" value="0"></fluent-progress-bar>
+        <div class="ai-actions">
+          <fluent-button id="aiDownloadBtn" appearance="accent">Baixar modelo</fluent-button>
+          <fluent-button id="aiCancelBtn" appearance="stealth" class="hidden">Cancelar</fluent-button>
+          <fluent-button id="aiRecheckBtn" appearance="stealth" class="hidden"><span data-icon="refresh"></span> Verificar de novo</fluent-button>
+          <fluent-button id="aiOllamaLink" appearance="stealth" class="hidden">Baixar o Ollama</fluent-button>
+        </div>
+      </div>
+      <div class="ai-setting">
+        <div>
+          <div class="ai-setting__label">Sugestões automáticas</div>
+          <div class="ai-setting__hint">Liga ou desliga as sugestões enquanto você digita.</div>
+        </div>
+        <div class="segmented" id="aiEnabledSwitch">
+          <button type="button" data-on="true">Ligadas</button>
+          <button type="button" data-on="false">Desligadas</button>
+        </div>
+      </div>
+      <div class="ai-setting ai-setting--col">
+        <label class="ai-setting__label" for="aiWhenSelect">Quando sugerir</label>
+        <select id="aiWhenSelect" class="ai-select">
+          <option value="pause">Quando eu pausar digitando</option>
+          <option value="typing">Enquanto eu digito</option>
+          <option value="manual" title="Ctrl+Espaço">Só quando eu pedir (Ctrl+Espaço)</option>
+        </select>
+      </div>
+      <div class="ai-setting ai-setting--col">
+        <label class="ai-setting__label" for="aiSizeSelect">Tamanho das sugestões</label>
+        <select id="aiSizeSelect" class="ai-select">
+          <option value="auto">Automático — decide pelo contexto</option>
+          <option value="short">Curtas — 1 linha</option>
+          <option value="medium">Médias — até 2 linhas</option>
+          <option value="long">Longas — até 6 linhas</option>
+        </select>
+      </div>
+      <p class="ai-hint">Com a sugestão na tela: <kbd>Tab</kbd> aceita · <kbd>Esc</kbd> ignora. Selecione um texto para <b>Reduzir</b>, <b>Aumentar</b> ou <b>Corrigir gramática</b>.</p>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar">
+      <div class="sidebar__head">
+        <span class="sidebar__heading">Arquivos</span>
+      </div>
+      <div id="projectInfo" class="project-info"></div>
+      <div id="tree" class="tree" role="tree" aria-label="Arquivos do projeto"></div>
+      <div class="sidebar__foot">
+        <div class="storage">
+          <div class="storage__row"><span>Armazenamento local</span><span id="storageLabel">0 KB</span></div>
+          <fluent-progress-bar id="storageBar" min="0" max="100" value="0"></fluent-progress-bar>
+        </div>
+        <div class="sidebar__foot-actions">
+          <button class="link-btn" id="resetBtn" type="button">Restaurar exemplo</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="tabs" class="tabs" role="tablist"></div>
+
+      <div class="toolbar" id="toolbar">
+        <div class="toolbar__group">
+          <div class="format-group" aria-label="Formatação">
+            <button class="fmt-btn" data-format="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
+            <button class="fmt-btn" data-format="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
+            <button class="fmt-btn" data-format="heading" title="Título">H</button>
+            <button class="fmt-btn" data-format="code" title="Código">&lt;/&gt;</button>
+            <button class="fmt-btn" data-format="link" title="Link"><span data-icon="link"></span></button>
+            <button class="fmt-btn" data-format="list" title="Lista"><span data-icon="list"></span></button>
+            <button class="fmt-btn" data-format="quote" title="Citação"><span data-icon="quote"></span></button>
+          </div>
+        </div>
+        <div class="toolbar__group toolbar__group--right">
+          <fluent-button id="copyBtn" appearance="stealth" class="tool-btn" title="Copiar markdown (Ctrl+Shift+C)">
+            <span data-icon="copy"></span> Copiar
+          </fluent-button>
+          <fluent-button id="downloadBtn" appearance="stealth" class="tool-btn" title="Baixar arquivo .md">
+            <span data-icon="download"></span> Baixar
+          </fluent-button>
+          <fluent-button id="insertAttachmentBtn" appearance="stealth" class="tool-btn" title="Enviar anexos para o prompt">
+            <span data-icon="attach"></span> Inserir arquivos
+          </fluent-button>
+          <fluent-button id="togglePreviewBtn" appearance="stealth" class="icon-btn" title="Mostrar/ocultar pré-visualização">
+            <span data-icon="split"></span>
+          </fluent-button>
+        </div>
+      </div>
+
+      <div id="emptyState" class="empty-state hidden">
+        <div class="empty-state__icon" data-icon="file-text"></div>
+        <h2>Nenhum prompt aberto</h2>
+        <p>Selecione um arquivo markdown na lateral ou crie um novo prompt para começar.</p>
+        <fluent-button id="emptyNewBtn" appearance="accent">Criar prompt</fluent-button>
+      </div>
+
+      <div id="split" class="split">
+        <div class="pane pane--editor" id="editorPane">
+          <div class="pane__head">
+            <span class="pane__title"><span data-icon="code-file"></span> Editor</span>
+            <span class="pane__meta" id="editorMeta">Markdown · formatação em destaque no editor</span>
+          </div>
+          <div class="editor-container" id="editorContainer">
+            <div id="editor" class="editor-input" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" data-placeholder="# Comece a escrever seu prompt...&#10;&#10;Dica: digite @ para referenciar arquivos."></div>
+            <div id="mentionDropdown" class="mention-dropdown" role="listbox"></div>
+            <div id="selectionTools" class="selection-tools hidden" role="toolbar" aria-label="Ações de texto da IA local">
+              <span class="selection-tools__title" data-icon="sparkle"></span>
+              <button type="button" data-sel-action="reduce">Reduzir</button>
+              <button type="button" data-sel-action="expand">Aumentar</button>
+              <button type="button" data-sel-action="grammar">Corrigir gramática</button>
+            </div>
+            <div id="selectionResult" class="ai-suggestion hidden" role="dialog" aria-label="Resultado da IA local">
+              <div class="ai-suggestion__head"><span data-icon="sparkle"></span><span id="selectionResultTitle">Resultado</span><span class="ai-suggestion__hint">Aceitar substitui a seleção</span></div>
+              <pre class="ai-suggestion__code"></pre>
+              <div class="ai-suggestion__actions">
+                <button type="button" class="mini-btn" id="selectionAcceptBtn">Aceitar</button>
+                <button type="button" class="mini-btn" id="selectionDismissBtn">Ignorar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="split-divider" id="splitDivider" role="separator" aria-orientation="vertical" title="Arraste para redimensionar"></div>
+
+        <div class="pane pane--preview" id="previewPane">
+          <div class="pane__head">
+            <span class="pane__title"><span data-icon="eye"></span> Pré-visualização</span>
+            <span class="pane__meta">GFM ·highlight · math</span>
+          </div>
+          <article id="preview" class="markdown-body"></article>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="statusbar">
+    <span id="statusProject">—</span>
+    <span class="status-sep">•</span>
+    <span id="statusPrompt">—</span>
+    <span class="status-spacer"></span>
+    <span id="statusWords">0 palavras</span>
+    <span class="status-sep">•</span>
+    <span id="statusChars">0 caracteres</span>
+    <span class="status-spacer"></span>
+    <span id="statusAi" class="status-ai">IA local: desligada</span>
+    <span class="status-sep">•</span>
+    <span id="saveStatus" class="save-status">Salvo</span>
+  </footer>
+</div>
+
+<fluent-dialog id="projectDialog" dialog-label="Novo projeto">
+  <div class="dialog">
+    <div class="dialog__title">Novo projeto</div>
+    <p class="dialog__desc">Crie um espaço para organizar prompts e anexos.</p>
+    <fluent-text-input id="projectNameInput" placeholder="Nome do projeto" autofocus></fluent-text-input>
+    <div class="dialog__actions">
+      <fluent-button id="projectCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="projectCreate" appearance="accent">Criar projeto</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="promptDialog" dialog-label="Novo prompt">
+  <div class="dialog">
+    <div class="dialog__title">Novo prompt</div>
+    <p class="dialog__desc">O arquivo será criado com a extensão .md.</p>
+    <fluent-text-input id="promptNameInput" placeholder="ex.: Analisar currículo.md" autofocus></fluent-text-input>
+    <div class="dialog__actions">
+      <fluent-button id="promptCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="promptCreate" appearance="accent">Criar prompt</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="renameDialog" dialog-label="Renomear arquivo">
+  <div class="dialog">
+    <div class="dialog__title">Renomear</div>
+    <p class="dialog__desc">Informe o novo nome do arquivo.</p>
+    <fluent-text-input id="renameInput" autofocus></fluent-text-input>
+    <div class="dialog__actions">
+      <fluent-button id="renameCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="renameConfirm" appearance="accent">Salvar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="attachDialog" dialog-label="Inserir anexos">
+  <div class="dialog dialog--wide">
+    <div class="dialog__title">Enviar anexos para o prompt</div>
+    <p class="dialog__desc">Selecione os arquivos. O conteúdo será inserido no cursor do editor.</p>
+    <div id="attachList" class="attach-list"></div>
+    <div class="dialog__actions">
+      <fluent-button id="attachCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="attachConfirm" appearance="accent">Inserir selecionados</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="libraryDialog" dialog-label="Adicionar item à biblioteca">
+  <div class="dialog dialog--wide">
+    <div class="dialog__title" id="libraryTitle">Novo item</div>
+    <p class="dialog__desc" id="libraryDesc"></p>
+    <div id="libraryForm" class="library-form"></div>
+    <div class="dialog__actions">
+      <fluent-button id="libraryCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="librarySave" appearance="accent">Salvar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="libraryDetailDialog" dialog-label="Detalhes do item">
+  <div class="dialog dialog--wide">
+    <div id="libraryDetail"></div>
+    <div class="dialog__actions">
+      <fluent-button id="libraryDetailClose" appearance="stealth">Fechar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="attachmentPreviewDialog" dialog-label="Pré-visualização do anexo">
+  <div class="dialog dialog--wide">
+    <div class="dialog__title" id="attachmentPreviewName">Anexo</div>
+    <div id="attachmentPreviewBody" class="attachment-preview"></div>
+    <div class="dialog__actions">
+      <fluent-button id="attachmentPreviewDownload" appearance="stealth">Baixar</fluent-button>
+      <fluent-button id="attachmentPreviewClose" appearance="accent">Fechar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="confirmDialog" dialog-label="Confirmar exclusão">
+  <div class="dialog">
+    <div class="dialog__title" id="confirmTitle">Excluir arquivo?</div>
+    <p class="dialog__desc" id="confirmMessage">Esta ação não pode ser desfeita.</p>
+    <div class="dialog__actions">
+      <fluent-button id="confirmCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="confirmDelete" appearance="accent">Excluir</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<input type="file" id="fileInput" multiple hidden />
+<input type="file" id="importInput" accept="application/json,.json" hidden />
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

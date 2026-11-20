@@ -1,0 +1,19 @@
+# Dependências e build
+node_modules/
+dist/
+
+# Ambiente e logs
+.env
+.env.*
+*.log
+npm-debug.log*
+
+# Sistema e editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Artefatos de teste (gerados localmente)
+test-*.mjs
+/*.png
