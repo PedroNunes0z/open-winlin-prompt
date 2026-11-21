@@ -33,12 +33,30 @@ export function backupRequirement() {
   return `O backup na nuvem precisa do app aberto em ${ALLOWED_ORIGIN} (o Google não aceita login em arquivos locais).`;
 }
 
+// Quando o popup falha (origem não autorizada, Client ID apagado, permissão
+// recusada), o Google não devolve o motivo para a página — o GSI só avisa que a
+// janela fechou. Essas mensagens precisam dizer o que fazer em pt-BR, nunca
+// repassar o texto cru do GSI ("Popup window closed").
+const AUTH_ERRORS = [
+  [/popup[_\s]?(window[_\s]?)?closed|window closed|popup_closed/i,
+    'A janela de login do Google fechou antes de concluir. Tente de novo; se ela mostrou um erro, atualize o app em Configurações → Atualizações.'],
+  [/has not completed|test users|not given you access|verification/i,
+    'O Google bloqueou o acesso para esta conta. Adicione o seu e-mail em "Usuários de teste" na tela de permissão do projeto (Google Cloud Console) e tente de novo.'],
+  [/access_denied|user_denied|denied/i,
+    'O Google não liberou o acesso. Se você recusou a permissão, tente de novo e aceite o acesso ao Drive — ele é necessário para o backup.'],
+  [/deleted_client|invalid_client|unauthorized_client|origin_mismatch|idpiframe|invalid_request|not a valid origin/i,
+    `O Google recusou o login deste app. Confira se o app está na versão mais recente e se ${ALLOWED_ORIGIN} está em "Origens JavaScript autorizadas" do Client ID.`],
+  [/popup_failed_to_open|blocked/i,
+    'O navegador bloqueou a janela de login do Google. Permita pop-ups para este app e tente de novo.'],
+  [/network|failed to fetch|offline/i,
+    'Sem conexão com o Google. Verifique sua internet e tente de novo.'],
+];
+
 function authErrorMessage(raw) {
-  const text = String(raw || '');
-  if (/origin_mismatch|idpiframe|invalid_client|invalid_request/i.test(text)) {
-    return `O Google recusou esta origem. Cadastre ${ALLOWED_ORIGIN} em "Origens JavaScript autorizadas" do Client ID no Google Cloud Console.`;
-  }
-  return text || 'Login do Google cancelado.';
+  const text = String(raw || '').trim();
+  for (const [pattern, message] of AUTH_ERRORS) if (pattern.test(text)) return message;
+  if (!text) return 'O login do Google não foi concluído. Tente de novo.';
+  return `O login do Google falhou: ${text}`;
 }
 
 async function waitForGoogle(timeout = 10000) {
@@ -77,7 +95,7 @@ export async function connectGoogleDrive({ silent = false } = {}) {
     const tokenClient = oauth2.initTokenClient({
       client_id: CLIENT_ID,
       scope: SCOPES,
-      error_callback: (err) => finish(reject, new Error(authErrorMessage(err?.message))),
+      error_callback: (err) => finish(reject, new Error(authErrorMessage(err?.message || err?.type))),
       callback: (response) => {
         if (response?.error) {
           finish(reject, new Error(authErrorMessage(response.error_description || response.error)));
