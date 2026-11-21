@@ -68,11 +68,20 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 
 ### Instalador `.exe` (recomendado)
 
-1. Baixe o **[`open-winlin-prompt-setup.exe`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt-setup.exe)**;
-2. Duplo clique e escolha as opções na janela (Ollama, modelo de IA, atalho);
-3. Clique em **Instalar** — ele extrai o pacote embutido em `%LOCALAPPDATA%\Programs\open-winlin-prompt`, configura o Ollama e cria o atalho.
+1. Baixe o **[`open-winlin-prompt-setup.exe`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt-setup.exe)** (≈ 1,5 MB);
+2. Duplo clique, marque **atalho na área de trabalho** / **abrir ao concluir** e clique em **Instalar**;
+3. Pronto: o app fica em `%LOCALAPPDATA%\Programs\open-winlin-prompt`, já com o acesso ao Ollama liberado.
 
-> Não pede administrador. O `.exe` só contém o app (não é código assinado); se o SmartScreen avisar, use **Mais informações → Executar assim mesmo**.
+O instalador traz o programa embutido (não baixa nem compila nada) e não pede administrador.
+Se o Ollama não estiver instalado, a janela oferece o link para baixar — depois é só ativar as sugestões de IA nas configurações do app (que também baixa o modelo).
+
+Instalação silenciosa (sem janela, útil para automação):
+
+```bat
+open-winlin-prompt-setup.exe --silent
+```
+
+> O `.exe` não é assinado digitalmente: se o Windows mostrar aviso, use **Mais informações → Executar assim mesmo**.
 
 ### Pelo repositório (`Instalar.cmd`)
 
