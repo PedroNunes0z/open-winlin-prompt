@@ -12,10 +12,10 @@
   --text-tertiary: var(--colorNeutralForeground3, #9a9a9a);
   --stroke: var(--colorNeutralStroke2, #3a3a3a);
   --stroke-subtle: var(--colorNeutralStroke3, #2f2f2f);
-  --accent: var(--colorBrandForeground1, #a66cff);
-  --accent-bg: var(--colorBrandBackground, #6a1bb8);
-  --accent-soft: rgba(138, 43, 226, 0.16);
-  --accent-grad: #ffa500; /* laranja do gradiente violeta → laranja */
+  --accent: var(--colorBrandForeground1, #00d2ff);
+  --accent-bg: var(--colorBrandBackground, #3a7bd5);
+  --accent-soft: rgba(0, 210, 255, 0.16);
+  --accent-grad: #3a7bd5; /* gradiente ciano → azul */
   --danger: #ff6b6b;
   --success: #6ccb8f;
   --shadow: 0 8px 26px rgba(0, 0, 0, 0.38);
@@ -49,7 +49,7 @@
 
 * { box-sizing: border-box; }
 
-::selection { background: rgba(138, 43, 226, 0.32); color: #f8f8ff; }
+::selection { background: rgba(0, 210, 255, 0.32); color: #f8f8ff; }
 
 /* botões de destaque: gradiente violeta → laranja com texto branco fantasma */
 fluent-button[appearance="accent"]::part(control) {
@@ -100,8 +100,7 @@ button { font-family: inherit; }
   box-shadow: inset 0 0 0 1px var(--stroke-subtle);
 }
 .app-mark svg { width: 24px; height: 24px; display: block; }
-/* Logo colorida com a cor de destaque do tema (claro/escuro + cor escolhida) */
-/* A logo (logo.svg) é um PNG violeta/laranja fixo — sem <stop> para colorir. */
+/* Logo original (logo.svg) mantida como está — é uma arte fixa, sem <stop> para colorir. */
 .app-title {
   font-size: 13.5px; font-weight: 700; letter-spacing: 0.01em;
   background: linear-gradient(90deg, var(--accent), var(--accent-grad));

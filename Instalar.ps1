@@ -434,8 +434,8 @@ $xaml = @"
         FontFamily="Segoe UI" TextElement.Foreground="#e9e9f4">
   <Window.Resources>
     <LinearGradientBrush x:Key="AccentBrush" StartPoint="0,0" EndPoint="1,0">
-      <GradientStop Offset="0" Color="#8a2be2"/>
-      <GradientStop Offset="1" Color="#ffa500"/>
+      <GradientStop Offset="0" Color="#00d2ff"/>
+      <GradientStop Offset="1" Color="#3a7bd5"/>
     </LinearGradientBrush>
     <LinearGradientBrush x:Key="BgBrush" StartPoint="0,0" EndPoint="0,1">
       <GradientStop Offset="0" Color="#262633"/>

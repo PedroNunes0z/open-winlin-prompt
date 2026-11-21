@@ -35,7 +35,7 @@ O **Open Winlin Prompt** é um aplicativo de área de trabalho (web local) para 
 - **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB);
 - **Menções `@`** para referenciar prompts e anexos do projeto;
 - **Desfazer/refazer** (`Ctrl+Z` / `Ctrl+Shift+Z`) e temas claro/escuro com cores de destaque.
-- **Tema padrão violeta** (`#8a2be2`) com gradiente para laranja (`#ffa500`) na logo, nos botões de destaque e atalhos, e superfícies branco-fantasma (`#f8f8ff`) no tema claro.
+- **Tema padrão ciano → azul** (`#00d2ff` → `#3a7bd5`) nos botões de destaque, selos, abas e detalhes, com superfícies branco-fantasma (`#f8f8ff`) no tema claro.
 
 ## Instalação
 
