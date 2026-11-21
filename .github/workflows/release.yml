@@ -1,0 +1,57 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-zip:
+    runs-on: windows-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências e compilar
+        run: |
+          npm ci
+          npm run build
+
+      - name: Empacotar arquivos finais
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package -Force | Out-Null
+          Copy-Item -Path dist -Destination package/dist -Recurse
+          Copy-Item -Path "Abrir Open Winlin Prompt.cmd" -Destination package/
+          Copy-Item -Path "Configurar Ollama.cmd" -Destination package/
+          Copy-Item -Path "README.md" -Destination package/
+          Copy-Item -Path "LICENSE" -Destination package/
+          if (Test-Path scripts) { Copy-Item -Path scripts -Destination package/scripts -Recurse }
+          if (Test-Path "Instalar.ps1") { Copy-Item -Path "Instalar.ps1" -Destination package/ }
+          Compress-Archive -Path package/* -DestinationPath open-winlin-prompt.zip -Force
+          Write-Host ("Pacote: " + (Get-Item open-winlin-prompt.zip).Length + " bytes")
+
+      - name: Guardar artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-winlin-prompt
+          path: open-winlin-prompt.zip
+
+      - name: Anexar .zip na Release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: open-winlin-prompt.zip
+          generate_release_notes: true

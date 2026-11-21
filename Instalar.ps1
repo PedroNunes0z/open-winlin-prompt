@@ -5,6 +5,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
 $RepoUrl   = 'https://github.com/PedroNunes0z/open-winlin-prompt.git'
+$ZipUrl    = 'https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip'
 $TargetDir = "$env:LOCALAPPDATA\Programs\open-winlin-prompt"
 $Model     = 'qwen2.5-coder:1.5b'
 
@@ -109,7 +110,7 @@ $sync = [hashtable]::Synchronized(@{
 
 # ---------------------------------------------------------------- worker (Runspace próprio)
 $workerScript = {
-    param($Sync, $RepoUrl, $TargetDir, $Model, $InstallOllama, $DownloadModel, $MakeShortcut)
+    param($Sync, $RepoUrl, $ZipUrl, $TargetDir, $Model, $InstallOllama, $DownloadModel, $MakeShortcut)
 
     $ErrorActionPreference = 'Stop'
     $ProgressPreference    = 'SilentlyContinue'
@@ -273,11 +274,8 @@ $workerScript = {
     try {
         # ---- 1. Pasta + clone
         $Sync.StepStates[0] = 'running'
-        $Sync.StatusText    = 'Etapa 1/5 — preparando pasta e clonando...'
+        $Sync.StatusText    = 'Etapa 1/5 — baixando o pacote pronto...'
         $Sync.ProgressPct   = 5
-        Throw-IfCancelled
-
-        if (-not (Ensure-Tool 'git' 'Git.Git')) { throw 'Git é necessário para clonar o repositório.' }
         Throw-IfCancelled
 
         if (Test-Path $TargetDir) {
@@ -292,17 +290,55 @@ $workerScript = {
         $parentDir = Split-Path $TargetDir -Parent
         if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
 
-        $git = (Get-Command git).Source
-        if ((Run-Step $git "clone `"$RepoUrl`" `"$TargetDir`"") -ne 0) { throw 'Falha ao clonar o repositório.' }
+        # 1a) pacote pronto da Release (não precisa de Node.js/Git)
+        $usedPackage = $false
+        $zipPath = Join-Path $env:TEMP 'open-winlin-prompt.zip'
+        try {
+            Add-Log "Baixando: $ZipUrl"
+            Invoke-WebRequest -Uri $ZipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 180
+            if ((Test-Path $zipPath) -and (Get-Item $zipPath).Length -gt 50KB) {
+                New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
+                Expand-Archive -Path $zipPath -DestinationPath $TargetDir -Force
+                if (Test-Path (Join-Path $TargetDir 'dist\index.html')) {
+                    $usedPackage = $true
+                    Add-Log 'Pacote pronto extraído (sem Node.js nem Git).'
+                } else {
+                    Add-Log 'Pacote incompleto — usando o código-fonte.'
+                }
+            }
+        } catch {
+            Add-Log "Pacote pronto indisponível ($($_.Exception.Message)) — usando o código-fonte."
+        } finally {
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        }
+
+        # 1b) fallback: clone do repositório + compilação
+        if (-not $usedPackage) {
+            if (Test-Path $TargetDir) { Remove-Item $TargetDir -Recurse -Force -ErrorAction SilentlyContinue }
+            if (-not (Ensure-Tool 'git' 'Git.Git')) { throw 'Git é necessário para clonar o repositório.' }
+            Throw-IfCancelled
+            $git = (Get-Command git).Source
+            if ((Run-Step $git "clone `"$RepoUrl`" `"$TargetDir`"") -ne 0) { throw 'Falha ao clonar o repositório.' }
+            Add-Log "Repositório clonado em $TargetDir"
+        }
         $Sync.StepStates[0] = 'done'
         $Sync.ProgressPct   = 25
-        Add-Log "Repositório clonado em $TargetDir"
 
-        # ---- 2. Dependências + build
+        # ---- 2. Dependências + build (só quando veio do código-fonte)
         $Sync.StepStates[1] = 'running'
         $Sync.StatusText    = 'Etapa 2/5 — instalando dependências e compilando...'
         Throw-IfCancelled
 
+        if ($usedPackage) {
+            Add-Log 'Pacote já compilado — etapa de build não é necessária.'
+            $Sync.StepStates[1] = 'done'
+            $Sync.ProgressPct   = 50
+            $Sync.StatusText    = 'Etapa 3/5 — verificando o Ollama...'
+            $Sync.StepStates[2] = 'running'
+            # segue direto para o Ollama
+        }
+
+        if (-not $usedPackage) {
         if (-not (Ensure-Tool 'node' 'OpenJS.NodeJS.LTS')) { throw 'Node.js é necessário para compilar o programa.' }
         Refresh-Path
         $npmExe = Get-NpmExe
@@ -321,6 +357,7 @@ $workerScript = {
         if ((Run-Step $npmExe 'run build' $TargetDir) -ne 0) { throw 'Falha ao compilar o programa.' }
         $Sync.StepStates[1] = 'done'
         $Sync.ProgressPct   = 50
+        }
 
         # ---- 3. Ollama
         $Sync.StepStates[2] = 'running'
@@ -338,6 +375,20 @@ $workerScript = {
 
         if ($ollamaExe) {
             Add-Log "Ollama encontrado em: $ollamaExe"
+
+            # O app roda via file:// e o Ollama recusa esse Origin por padrão.
+            # Liberamos aqui para não precisar do "Configurar Ollama.cmd" depois.
+            try {
+                $origins = [Environment]::GetEnvironmentVariable('OLLAMA_ORIGINS', 'User')
+                if ($origins -ne '*') {
+                    [Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS', '*', 'User')
+                    Add-Log 'OLLAMA_ORIGINS configurado (acesso do app liberado).'
+                }
+                $env:OLLAMA_ORIGINS = '*'
+            } catch {
+                Add-Log 'Aviso: não foi possível definir OLLAMA_ORIGINS automaticamente.'
+            }
+
             $serverReady = Test-OllamaServer
 
             if (-not $serverReady) {
@@ -388,6 +439,10 @@ $workerScript = {
         $Sync.StatusText    = 'Etapa 5/5 — criando atalho na área de trabalho...'
         Throw-IfCancelled
 
+        if (-not (Test-Path (Join-Path $TargetDir 'dist\index.html'))) {
+            throw 'O programa não foi encontrado na pasta de instalação.'
+        }
+
         if ($MakeShortcut) {
             $shell    = New-Object -ComObject WScript.Shell
             $linkPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Open Winlin Prompt.lnk'
@@ -411,6 +466,7 @@ $workerScript = {
         Add-Log "  Programa em: $TargetDir"
         Add-Log '  Dica: se o app não reconhecer o Ollama, execute o'
         Add-Log '  "Configurar Ollama.cmd" na pasta do programa.'
+        Add-Log '  Projeto open source (MIT): github.com/PedroNunes0z/open-winlin-prompt'
         Add-Log '=================================================='
     } catch {
         Add-Log "ERRO: $($_.Exception.Message)"
@@ -788,6 +844,7 @@ $installBtn.Add_Click({
     [void]$script:psInstance.AddScript($workerScript).
         AddArgument($sync).
         AddArgument($RepoUrl).
+        AddArgument($ZipUrl).
         AddArgument($TargetDir).
         AddArgument($Model).
         AddArgument([bool]$chkOllama.IsChecked).
