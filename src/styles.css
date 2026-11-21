@@ -12,9 +12,10 @@
   --text-tertiary: var(--colorNeutralForeground3, #9a9a9a);
   --stroke: var(--colorNeutralStroke2, #3a3a3a);
   --stroke-subtle: var(--colorNeutralStroke3, #2f2f2f);
-  --accent: var(--colorBrandForeground1, #60cdff);
-  --accent-bg: var(--colorBrandBackground, #005a9e);
-  --accent-soft: rgba(96, 205, 255, 0.14);
+  --accent: var(--colorBrandForeground1, #a66cff);
+  --accent-bg: var(--colorBrandBackground, #6a1bb8);
+  --accent-soft: rgba(138, 43, 226, 0.16);
+  --accent-grad: #ffa500; /* laranja do gradiente violeta → laranja */
   --danger: #ff6b6b;
   --success: #6ccb8f;
   --shadow: 0 8px 26px rgba(0, 0, 0, 0.38);
@@ -30,6 +31,7 @@
 }
 
 :root[data-theme="light"] {
+  --bg-app: #f8f8ff; /* branco fantasma com leve toque violeta */
   --success: #0f7a33;
   --danger: #c50f1f;
   --md-code-bg: rgba(0, 0, 0, 0.045);
@@ -46,6 +48,15 @@
 }
 
 * { box-sizing: border-box; }
+
+::selection { background: rgba(138, 43, 226, 0.32); color: #f8f8ff; }
+
+/* botões de destaque: gradiente violeta → laranja com texto branco fantasma */
+fluent-button[appearance="accent"]::part(control) {
+  background: linear-gradient(135deg, var(--accent), var(--accent-grad));
+  color: #f8f8ff;
+  border-color: transparent;
+}
 
 html, body {
   height: 100%;
@@ -87,8 +98,7 @@ button { font-family: inherit; }
 }
 .app-mark svg { width: 24px; height: 24px; display: block; }
 /* Logo colorida com a cor de destaque do tema (claro/escuro + cor escolhida) */
-.app-mark svg stop:first-of-type { stop-color: var(--accent); }
-.app-mark svg stop:last-of-type { stop-color: var(--accent-bg); }
+/* A logo (logo.svg) é um PNG violeta/laranja fixo — sem <stop> para colorir. */
 .app-title { font-size: 13.5px; font-weight: 600; letter-spacing: 0.01em; }
 .titlebar__center { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .titlebar__label { color: var(--text-tertiary); font-size: 12px; }
@@ -249,7 +259,7 @@ fluent-progress-bar { display: block; width: 100%; }
 }
 .tab:hover { color: var(--text-primary); background: var(--bg-hover); }
 .tab.is-active { color: var(--text-primary); background: var(--bg-surface); }
-.tab.is-active::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--accent); }
+.tab.is-active::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-grad)); }
 .tab__icon { display: flex; }
 .tab__icon svg { width: 16px; height: 16px; }
 .tab__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -17,7 +17,7 @@ function seedWorkspace() {
   return {
     version: 1,
     theme: 'dark',
-    accent: 'blue',
+    accent: 'violet',
     ai: { enabled: false, when: 'pause', size: 'auto', model: 'qwen2.5-coder:1.5b' },
     activeProjectId: projectId,
     activePromptId: promptId1,
@@ -93,7 +93,7 @@ function normalize(raw) {
   if (!raw || !Array.isArray(raw.projects) || raw.projects.length === 0) return seedWorkspace();
   raw.version = 1;
   raw.theme = raw.theme === 'light' ? 'light' : 'dark';
-  raw.accent = raw.accent || 'blue';
+  raw.accent = raw.accent || 'violet';
   raw.ai = {
     enabled: Boolean(raw.ai?.enabled),
     when: ['pause', 'typing', 'manual'].includes(raw.ai?.when) ? raw.ai.when : 'pause',

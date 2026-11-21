@@ -35,6 +35,7 @@ O **Open Winlin Prompt** é um aplicativo de área de trabalho (web local) para 
 - **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB);
 - **Menções `@`** para referenciar prompts e anexos do projeto;
 - **Desfazer/refazer** (`Ctrl+Z` / `Ctrl+Shift+Z`) e temas claro/escuro com cores de destaque.
+- **Tema padrão violeta** (`#8a2be2`) com gradiente para laranja (`#ffa500`) na logo, nos botões de destaque e atalhos, e superfícies branco-fantasma (`#f8f8ff`) no tema claro.
 
 ## Instalação
 
@@ -42,7 +43,7 @@ O **Open Winlin Prompt** é um aplicativo de área de trabalho (web local) para 
 
 1. Baixe ou clone este repositório;
 2. Duplo clique em **`Instalar.cmd`** — ele:
-   - clona o repositório em `C:\Program Files\open-winlin-prompt` (substituindo, se existir);
+   - clona o repositório em `%LOCALAPPDATA%\Programs\open-winlin-prompt` (substituindo, se existir) — sem pedir administrador;
    - instala dependências e compila o programa;
    - detecta o **Ollama** e, se faltar, oferece instalá-lo;
    - oferece baixar o modelo de IA e criar o atalho na área de trabalho.

@@ -26,6 +26,7 @@ import logoSvg from './assets/img/logo.svg?raw';
 import configScript from '../scripts/configurar-ollama.ps1?raw';
 
 const ACCENTS = {
+  violet: { dark: '#a66cff', light: '#8a2be2', bg: '#6a1bb8', rgb: '138, 43, 226' },
   blue:   { dark: '#60cdff', light: '#0067c0', bg: '#005a9e', rgb: '96, 205, 255' },
   purple: { dark: '#b48cff', light: '#7a26d8', bg: '#7a26d8', rgb: '180, 140, 255' },
   teal:   { dark: '#4dd0c1', light: '#007f75', bg: '#007a70', rgb: '77, 208, 193' },
@@ -83,7 +84,7 @@ function applyTheme() {
   root.dataset.theme = state.theme;
   root.style.colorScheme = state.theme;
 
-  const accent = ACCENTS[state.accent] || ACCENTS.blue;
+  const accent = ACCENTS[state.accent] || ACCENTS.violet;
   const brandFg = state.theme === 'light' ? accent.light : accent.dark;
   const accentSoft = `rgba(${accent.rgb}, ${state.theme === 'light' ? '0.12' : '0.16'})`;
   root.style.setProperty('--accent', brandFg);
