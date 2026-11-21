@@ -22,6 +22,16 @@
   <img src="https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square" alt="Node.js">
 </p>
 
+<p align="center">
+  <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar%20para%20Windows-open--winlin--prompt.zip-00d2ff?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">Download direto do pacote pronto</a> (≈ 1,5 MB, sem precisar de Node.js ou Git)
+</p>
+
 ---
 
 ## Sobre
@@ -66,6 +76,12 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 > Nada de administrador: tudo fica no seu perfil de usuário.
 
 ### Só o pacote pronto
+
+<p>
+  <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar-open--winlin--prompt.zip-00d2ff?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
+  </a>
+</p>
 
 Se preferir não usar o instalador, baixe direto o
 [`open-winlin-prompt.zip`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip),
