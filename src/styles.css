@@ -1018,3 +1018,12 @@ fluent-dialog#libraryDetailDialog::part(dialog) { width: min(540px, calc(100vw -
 .backup-status.is-ok { color: var(--success); }
 .backup-status.is-error { color: var(--danger); }
 .update-cta:disabled { opacity: 0.6; cursor: progress; filter: none; }
+
+/* links para o site público (política e termos) */
+.settings-panel__footer {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  margin-top: 18px; padding-top: 13px; border-top: 1px solid var(--stroke-subtle);
+  font-size: 10.8px; color: var(--text-tertiary);
+}
+.settings-panel__footer a { color: var(--text-secondary); text-decoration: none; }
+.settings-panel__footer a:hover { color: var(--accent); text-decoration: underline; }

@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://pedronunes0z.github.io/open-winlin-prompt/"><img src="https://img.shields.io/badge/site-apresenta%C3%A7%C3%A3o-00d2ff?style=flat-square" alt="Site"></a>
   <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest"><img src="https://img.shields.io/github/v/release/PedroNunes0z/open-winlin-prompt?style=flat-square&label=release" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-2ea44f?style=flat-square" alt="Licença MIT"></a>
   <img src="https://img.shields.io/badge/PRs-bem--vindos-00d2ff?style=flat-square" alt="PRs bem-vindos">
@@ -32,8 +33,14 @@
 </p>
 
 <p align="center">
-  <b>Instalador .exe</b> (≈ 1,5 MB, com o app embutido, sem Node.js/Git) ·
+  <b>Instalador .exe</b> (≈ 1,6 MB, com o app embutido, sem Node.js/Git) ·
   <b>Pacote .zip</b> (portátil, extrair e rodar)
+</p>
+
+<p align="center">
+  Site de apresentação: <a href="https://pedronunes0z.github.io/open-winlin-prompt/">pedronunes0z.github.io/open-winlin-prompt</a><br>
+  <a href="https://pedronunes0z.github.io/open-winlin-prompt/privacidade.html">Política de Privacidade</a> ·
+  <a href="https://pedronunes0z.github.io/open-winlin-prompt/termos.html">Termos de Serviço</a>
 </p>
 
 ---
@@ -190,6 +197,7 @@ open-winlin-prompt/
 ├── Abrir Open Winlin Prompt.cmd     # atalho do programa
 ├── scripts/configurar-ollama.ps1    # script de configuração da IA
 ├── scripts/servidor.ps1             # servidor local em http://localhost:43210
+├── docs/                            # site público (GitHub Pages) + política e termos
 ├── src/
 │   ├── main.js                      # interface, biblioteca, IA, histórico
 │   ├── editor.js                    # editor + formatação inline
@@ -202,6 +210,14 @@ open-winlin-prompt/
 │   └── assets/img/logo.svg          # logo
 └── dist/                            # build (gerado por npm run build)
 ```
+
+## Site e documentos públicos
+
+- **Site de apresentação:** https://pedronunes0z.github.io/open-winlin-prompt/ (pasta [`docs/`](docs), publicada pelo GitHub Pages com o mesmo design system do app)
+- **Política de Privacidade:** https://pedronunes0z.github.io/open-winlin-prompt/privacidade.html
+- **Termos de Serviço:** https://pedronunes0z.github.io/open-winlin-prompt/termos.html
+
+Os dois documentos também estão no repositório ([`docs/privacidade.html`](docs/privacidade.html) e [`docs/termos.html`](docs/termos.html)) e podem ser revisados por qualquer pessoa.
 
 ## Licença
 

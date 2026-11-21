@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Política de Privacidade — Open Winlin Prompt</title>
+  <meta name="description" content="Como o Open Winlin Prompt trata seus dados: tudo fica no seu computador, sem telemetria, com backup no Google Drive apenas se você quiser." />
+  <meta name="theme-color" content="#1b1b1b" />
+  <meta property="og:title" content="Política de Privacidade — Open Winlin Prompt" />
+  <meta property="og:description" content="Sem conta, sem rastreio e sem servidores do desenvolvedor. Veja o que fica no seu PC e o que acontece quando você usa o Google Drive." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://pedronunes0z.github.io/open-winlin-prompt/privacidade.html" />
+  <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="./index.html">
+      <span class="brand__mark"><img src="./assets/logo.svg" alt="" width="24" height="24" /></span>
+      <span class="brand__name">Open Winlin Prompt<span>prompt studio local</span></span>
+    </a>
+    <nav class="nav" aria-label="Seções">
+      <a href="./index.html#recursos">Recursos</a>
+      <a href="./index.html#telas">Telas</a>
+      <a href="./index.html#instalacao">Instalação</a>
+      <a href="./termos.html">Termos de Serviço</a>
+    </nav>
+    <div class="topbar__actions">
+      <button class="icon-btn" type="button" data-theme-icon="light" title="Alternar tema" aria-label="Alternar tema claro/escuro">
+        <svg class="theme-icon-sun" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="10" cy="10" r="3.4"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M15.8 4.2l-1.4 1.4M5.6 14.4l-1.4 1.4"/></svg>
+        <svg class="theme-icon-moon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.2 12.8A7 7 0 017.2 3.8a7 7 0 109 9z"/></svg>
+      </button>
+      <a class="btn btn--ghost btn--small" href="https://github.com/PedroNunes0z/open-winlin-prompt">GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+  <div class="doc-hero">
+    <div class="wrap">
+      <span class="eyebrow">Documento público</span>
+      <h1>Política de Privacidade</h1>
+      <p>Esta política explica, sem letras miúdas, quais dados o Open Winlin Prompt usa, onde eles ficam e o que acontece quando você escolhe ligar a IA local, o backup no Google Drive ou a verificação de atualizações.</p>
+      <div class="doc-meta">
+        <span>Última atualização: <strong>21 de novembro de 2026</strong></span>
+        <span>Versão do app: <code>1.3.0</code></span>
+        <span>Aplica-se ao app para Windows e a este site</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="doc">
+    <div class="wrap doc__grid">
+      <nav class="toc" aria-label="Índice">
+        <h2>Índice</h2>
+        <ol>
+          <li><a href="#resumo">Resumo</a></li>
+          <li><a href="#controlador">Quem é o responsável</a></li>
+          <li><a href="#dados-locais">Dados guardados no seu computador</a></li>
+          <li><a href="#internet">O que pode acessar a internet</a></li>
+          <li><a href="#drive">Backup no Google Drive</a></li>
+          <li><a href="#ia">Sugestões de IA (Ollama)</a></li>
+          <li><a href="#site">Este site</a></li>
+          <li><a href="#compartilhamento">Compartilhamento e publicidade</a></li>
+          <li><a href="#retencao">Retenção e exclusão</a></li>
+          <li><a href="#seguranca">Segurança</a></li>
+          <li><a href="#direitos">Seus direitos (LGPD e GDPR)</a></li>
+          <li><a href="#criancas">Crianças e adolescentes</a></li>
+          <li><a href="#alteracoes">Alterações desta política</a></li>
+          <li><a href="#contato">Contato</a></li>
+        </ol>
+      </nav>
+
+      <article>
+        <h2 id="resumo">1. Resumo</h2>
+        <div class="callout">
+          <p><strong>O app não tem servidor.</strong> Prompts, anexos, quadro de tarefas, notas e configurações ficam no armazenamento do navegador, no seu computador. Não existe cadastro, telemetria, analytics ou rastreamento.</p>
+          <p>Internet só é usada em três situações, todas opcionais ou explícitas: <strong>backup no Google Drive</strong> (se você clicar), <strong>sugestões de IA</strong> (para o Ollama na sua própria máquina) e <strong>verificação de atualizações</strong> (uma consulta pública ao GitHub).</p>
+        </div>
+
+        <h2 id="controlador">2. Quem é o responsável</h2>
+        <p>O Open Winlin Prompt é um projeto independente e de código aberto mantido por <strong>Pedro Nunes</strong>, desenvolvedor individual. Não há empresa, não há contratação de serviços de análise de dados e não há coleta de dados pessoais pelo desenvolvedor.</p>
+        <p>Contato para assuntos de privacidade: <a href="https://github.com/PedroNunes0z/open-winlin-prompt/issues">issues do repositório no GitHub</a>.</p>
+
+        <h2 id="dados-locais">3. Dados guardados no seu computador</h2>
+        <p>O app é uma aplicação local. Estas informações ficam na sua máquina e não são transmitidas ao desenvolvedor:</p>
+        <table>
+          <thead>
+            <tr><th>O que</th><th>Onde</th><th>Para quê</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Projetos, prompts (conteúdo Markdown), nomes de arquivos</td>
+              <td><code>localStorage</code> — chave <code>open-winlin-prompt.workspace.v1</code></td>
+              <td>Manter seu trabalho entre sessões</td>
+            </tr>
+            <tr>
+              <td>Biblioteca de APIs (provedor, URLs, modelos e <strong>chave de API</strong>), IDEs e sites</td>
+              <td>Mesmo workspace</td>
+              <td>Preencher prompts sem digitar tudo de novo</td>
+            </tr>
+            <tr>
+              <td>Tarefas do quadro e notas com lembretes</td>
+              <td>Mesmo workspace</td>
+              <td>Organização do projeto</td>
+            </tr>
+            <tr>
+              <td>Anexos (arquivos de até 50 MB)</td>
+              <td><code>IndexedDB</code> — banco <code>open-winlin-prompt</code>, coleção <code>attachments</code></td>
+              <td>Pré-visualizar e inserir o conteúdo no prompt</td>
+            </tr>
+            <tr>
+              <td>Preferências (tema, cor de destaque, IA ligada/desligada, último backup)</td>
+              <td>Mesmo workspace</td>
+              <td>Manter a aparência e as opções escolhidas</td>
+            </tr>
+            <tr>
+              <td>Preferência de tema deste site</td>
+              <td><code>localStorage</code> — chave <code>open-winlin-prompt.site-theme</code></td>
+              <td>Lembrar se você prefere claro ou escuro</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><strong>Chaves de API:</strong> se você cadastrar uma chave na biblioteca, ela é gravada apenas no seu navegador, no mesmo armazenamento local. O app nunca envia essa chave para lugar nenhum; ao inserir um item da biblioteca em um prompt, a chave é deliberadamente omitida.</p>
+
+        <h2 id="internet">4. O que pode acessar a internet</h2>
+        <p>Fora os casos abaixo, o app funciona totalmente offline:</p>
+        <ul>
+          <li><strong>Verificação de atualizações</strong> — ao abrir o app e quando você clica em “Verificar”, é feita uma requisição HTTPS pública para <code>api.github.com</code> pedindo a última versão publicada. Nenhum dado seu (prompts, anexos, identificadores) é enviado; como em qualquer acesso à internet, o GitHub recebe o endereço IP da conexão e aplica a <a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement">política de privacidade dele</a>.</li>
+          <li><strong>Backup no Google Drive</strong> — apenas se você clicar em “Salvar no Google Drive” ou “Restaurar do Drive”. Detalhes na seção 5.</li>
+          <li><strong>Sugestões de IA</strong> — o app conversa com o <strong>Ollama na sua própria máquina</strong> (<code>localhost:11434</code>). Se você configurar o Ollama para usar um servidor remoto, esse tráfego passa a existir por sua escolha e fica fora do controle do app.</li>
+          <li><strong>Carregamento da interface</strong> — o app é servido por um servidor local incluído no instalador, em <code>http://localhost:43210</code>, que escuta somente em <code>127.0.0.1</code> (não fica acessível na sua rede). O script de login do Google (<code>accounts.google.com/gsi/client</code>) é carregado dessa origem.</li>
+        </ul>
+
+        <h2 id="drive">5. Backup no Google Drive</h2>
+        <p>O backup na nuvem é <strong>opcional</strong> e só acontece por ação sua. Quando você usa esse recurso:</p>
+        <ul>
+          <li>O app pede autorização ao Google com o escopo <code>https://www.googleapis.com/auth/drive.file</code>. Esse escopo dá acesso <strong>apenas aos arquivos que o próprio app cria</strong> — ele não consegue listar nem ler o resto do seu Drive.</li>
+          <li>O conteúdo enviado é um único arquivo <code>open-winlin-prompt-backup.json</code> com o workspace (prompts, biblioteca, quadro, notas) e os anexos convertidos em Base64. Ele fica na sua conta do Google Drive.</li>
+          <li>A transmissão acontece diretamente entre o seu navegador e os servidores do Google. <strong>Não existe servidor intermediário do Open Winlin Prompt.</strong></li>
+          <li>O token de acesso do Google é mantido <strong>apenas na memória</strong> enquanto o app está aberto. Ele não é gravado no disco, no <code>localStorage</code> nem no arquivo de backup.</li>
+          <li>Você pode revogar o acesso a qualquer momento em <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> e apagar o arquivo de backup direto no Drive. Também é possível baixar o mesmo backup como arquivo <code>.json</code> no computador, sem usar o Google.</li>
+        </ul>
+        <p>O tratamento de dados pelo Google é regido pelos termos e pela política de privacidade do Google, incluindo possível processamento fora do Brasil.</p>
+
+        <h2 id="ia">6. Sugestões de IA (Ollama)</h2>
+        <p>As sugestões usam o <a href="https://ollama.com/">Ollama</a> com o modelo <strong>Qwen 2.5 Coder 1.5B</strong>, executado no seu computador. O trecho de texto ao redor do cursor é enviado <strong>somente ao processo local</strong> do Ollama (por padrão, <code>http://localhost:11434</code>). O desenvolvedor não recebe, não armazena e não tem acesso a esse conteúdo.</p>
+        <p>Se você instalar outro modelo ou apontar o Ollama para um servidor remoto, o envio passará a ocorrer conforme a configuração que você escolher.</p>
+
+        <h2 id="site">7. Este site</h2>
+        <p>Este site é estático e hospedado no <strong>GitHub Pages</strong>. Ele não usa cookies de análise, pixels de rastreamento, fontes externas ou scripts de terceiros além do próprio GitHub. A única informação guardada no seu navegador é a preferência de tema (claro/escuro).</p>
+        <p>Como qualquer hospedagem, o GitHub registra dados técnicos de acesso (endereço IP, data/hora, agente do navegador) para segurança e funcionamento do serviço, conforme a política de privacidade do GitHub.</p>
+
+        <h2 id="compartilhamento">8. Compartilhamento e publicidade</h2>
+        <p>O desenvolvedor <strong>não vende, não aluga e não compartilha</strong> dados de usuários. Não há anúncios, perfis de comportamento, remarketing ou transferência de dados para terceiros. Os únicos terceiros envolvidos são os que você escolhe usar: Google (Drive) e GitHub (atualizações e hospedagem do site), além do Ollama local.</p>
+
+        <h2 id="retencao">9. Retenção e exclusão</h2>
+        <ul>
+          <li><strong>No app:</strong> os dados ficam no navegador até você apagar. Excluir um projeto, prompt, anexo ou nota remove o item do armazenamento local. Também é possível limpar tudo em “Restaurar exemplo” ou apagando os dados do site nas configurações do navegador.</li>
+          <li><strong>No Drive:</strong> o arquivo de backup permanece na sua conta até você apagá-lo — pelo Drive ou pelo próprio app, salvando novamente.</li>
+          <li><strong>No site:</strong> nada além da preferência de tema, que você pode apagar limpando os dados do site.</li>
+        </ul>
+        <p>Como o desenvolvedor não mantém base de dados de usuários, não há prazo de retenção a ser cumprido do nosso lado.</p>
+
+        <h2 id="seguranca">10. Segurança</h2>
+        <p>O app não envia seus dados para servidores do projeto e usa HTTPS para falar com o Google e com o GitHub. Ainda assim, os dados locais ficam protegidos pela segurança do seu computador e do perfil do navegador — recomenda-se senha na conta do Windows, disco criptografado (BitLocker) e backup regular.</p>
+        <p><strong>Atenção:</strong> o backup no Drive é um arquivo JSON legível. Se você usa chaves de API na biblioteca, elas vão nesse arquivo. Trate o backup como um documento sensível e mantenha a conta do Google protegida com verificação em duas etapas.</p>
+
+        <h2 id="direitos">11. Seus direitos (LGPD e GDPR)</h2>
+        <p>Você tem direito a confirmação de tratamento, acesso, correção, portabilidade, eliminação e informação sobre compartilhamento (LGPD, art. 18; GDPR, arts. 15 a 22). Como o app não envia dados ao desenvolvedor:</p>
+        <ul>
+          <li><strong>Acesso e portabilidade:</strong> use “Baixar backup (.json)”, que exporta todo o seu conteúdo em formato aberto.</li>
+          <li><strong>Correção e eliminação:</strong> edite ou exclua itens no próprio app e no Google Drive.</li>
+          <li><strong>Informações:</strong> esta política descreve todo o fluxo de dados; dúvidas podem ser enviadas pelo GitHub.</li>
+        </ul>
+        <p>Você também pode apresentar reclamação à Autoridade Nacional de Proteção de Dados (ANPD) ou à autoridade de proteção de dados do seu país.</p>
+
+        <h2 id="criancas">12. Crianças e adolescentes</h2>
+        <p>O app é uma ferramenta de produtividade e não é direcionado a menores de 13 anos. Não coletamos conscientemente dados de crianças, justamente porque não coletamos dados de ninguém.</p>
+
+        <h2 id="alteracoes">13. Alterações desta política</h2>
+        <p>Mudanças de recursos podem exigir atualizações neste documento. A data no topo indica a última revisão e o histórico fica público no <a href="https://github.com/PedroNunes0z/open-winlin-prompt/commits/main/docs/privacidade.html">histórico do repositório</a>. Alterações relevantes serão destacadas nas notas da versão.</p>
+
+        <h2 id="contato">14. Contato</h2>
+        <p>Dúvidas, correções ou pedidos relacionados a privacidade: abra uma issue em <a href="https://github.com/PedroNunes0z/open-winlin-prompt/issues">github.com/PedroNunes0z/open-winlin-prompt/issues</a>.</p>
+
+        <div class="doc-back">
+          <a class="btn btn--ghost btn--small" href="./index.html">Voltar ao site</a>
+          <a class="btn btn--ghost btn--small" href="./termos.html">Termos de Serviço</a>
+        </div>
+      </article>
+    </div>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer__grid">
+      <div class="footer__about">
+        <a class="brand" href="./index.html">
+          <span class="brand__mark"><img src="./assets/logo.svg" alt="" width="24" height="24" /></span>
+          <span class="brand__name">Open Winlin Prompt<span>prompt studio local</span></span>
+        </a>
+        <p>Editor de prompts Markdown com IA local, organização e backup opcional. Código aberto sob licença MIT.</p>
+      </div>
+      <div>
+        <h4>Produto</h4>
+        <ul>
+          <li><a href="./index.html#recursos">Recursos</a></li>
+          <li><a href="./index.html#telas">Telas</a></li>
+          <li><a href="./index.html#instalacao">Instalação</a></li>
+          <li><a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases">Versões</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Legal e projeto</h4>
+        <ul>
+          <li><a href="./privacidade.html">Política de Privacidade</a></li>
+          <li><a href="./termos.html">Termos de Serviço</a></li>
+          <li><a href="https://github.com/PedroNunes0z/open-winlin-prompt">GitHub</a></li>
+          <li><a href="https://github.com/PedroNunes0z/open-winlin-prompt/blob/main/LICENSE">Licença MIT</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>© <span data-year>2026</span> Pedro Nunes · Open Winlin Prompt</span>
+      <span>Feito com Vite, Fluent UI, marked e KaTeX.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="./site.js"></script>
+</body>
+</html>

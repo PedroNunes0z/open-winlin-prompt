@@ -1381,6 +1381,7 @@ function renderEditor() {
   if (special) {
     els.emptyState.classList.add('hidden');
     const labels = { board: 'Quadro de tarefas', notes: 'Notas e lembretes' };
+    els.statusProject.textContent = project.name;
     $('#statusPrompt').textContent = labels[special];
     $('#editorMeta').textContent = `${project.name} · ${labels[special]}`;
     updateSpecialStatus(special);
