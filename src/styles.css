@@ -990,3 +990,31 @@ fluent-dialog#libraryDetailDialog::part(dialog) { width: min(540px, calc(100vw -
   background: linear-gradient(135deg, var(--accent), var(--accent-grad));
   box-shadow: 0 0 0 2px var(--bg-surface);
 }
+
+/* --------------------------- backup na nuvem (Drive) --------------------------- */
+
+.backup-box {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 11px 12px 12px; border: 1px solid var(--stroke-subtle); border-radius: 8px;
+  background: var(--bg-app);
+}
+.backup-hint { margin: 0; font-size: 10.8px; line-height: 1.5; color: var(--text-tertiary); }
+.backup-hint b { color: var(--text-secondary); font-family: var(--font-mono); font-size: 10.5px; }
+.backup-actions { display: flex; flex-direction: column; gap: 6px; }
+.backup-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 9px; border: 1px solid var(--stroke); border-radius: 6px; cursor: pointer;
+  background: var(--bg-surface); color: var(--text-secondary);
+  font-family: inherit; font-size: 11.3px; font-weight: 600;
+}
+.backup-secondary:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.backup-secondary > span[data-icon] { display: inline-flex; }
+.backup-secondary svg { width: 14px; height: 14px; }
+.backup-secondary:disabled { opacity: 0.5; cursor: default; }
+.backup-divider { display: flex; align-items: center; gap: 8px; font-size: 9.8px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); }
+.backup-divider::before, .backup-divider::after { content: ""; flex: 1; height: 1px; background: var(--stroke-subtle); }
+.backup-status { font-size: 10.8px; line-height: 1.5; color: var(--text-tertiary); }
+.backup-status.is-busy { color: var(--accent); }
+.backup-status.is-ok { color: var(--success); }
+.backup-status.is-error { color: var(--danger); }
+.update-cta:disabled { opacity: 0.6; cursor: progress; filter: none; }

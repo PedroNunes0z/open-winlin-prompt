@@ -45,6 +45,9 @@ export const icons = {
   calendar: svg('<rect x="3" y="4.5" width="14" height="12" rx="1.6"/><path d="M3 8h14M7 3v3M13 3v3"/>'),
   drag: svg('<circle cx="8" cy="6" r="1"/><circle cx="12" cy="6" r="1"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="10" r="1"/><circle cx="8" cy="14" r="1"/><circle cx="12" cy="14" r="1"/>'),
   'arrow-down': svg('<path d="M10 3v12M5.5 10.5L10 15l4.5-4.5"/>'),
+  'cloud-upload': svg('<path d="M6 14.5a3.5 3.5 0 01-.4-6.98A4.6 4.6 0 0110 4.5a4.6 4.6 0 014.4 3.02A3.5 3.5 0 0114 14.5"/><path d="M10 16.5V9.5M7.5 12L10 9.5l2.5 2.5"/>'),
+  'cloud-download': svg('<path d="M6 14.5a3.5 3.5 0 01-.4-6.98A4.6 4.6 0 0110 4.5a4.6 4.6 0 014.4 3.02A3.5 3.5 0 0114 14.5"/><path d="M10 8.5v7M7.5 13l2.5 2.5 2.5-2.5"/>'),
+  cloud: svg('<path d="M6 15a3.6 3.6 0 01-.4-7.18A4.7 4.7 0 0110 4.4a4.7 4.7 0 014.4 3.42A3.6 3.6 0 0114 15H6z"/>'),
   // --- ícones por tipo de arquivo anexado ---
   'file-image': svg('<rect x="2.5" y="3.5" width="15" height="13" rx="1.8"/><circle cx="7" cy="8" r="1.8"/><path d="M3 16.5l4.5-4.5 2.5 2.5 3-3 4 4"/>'),
   'file-video': svg('<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M8.5 8l4.5 2.5L8.5 13V8z"/>'),

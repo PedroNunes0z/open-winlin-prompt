@@ -141,6 +141,10 @@ function normalize(raw) {
   raw.version = 1;
   raw.theme = raw.theme === 'light' ? 'light' : 'dark';
   raw.accent = raw.accent || 'cyan';
+  raw.drive = {
+    lastBackupAt: typeof raw.drive?.lastBackupAt === 'string' ? raw.drive.lastBackupAt : '',
+    fileName: typeof raw.drive?.fileName === 'string' ? raw.drive.fileName : '',
+  };
   raw.ai = {
     enabled: Boolean(raw.ai?.enabled),
     when: ['pause', 'typing', 'manual'].includes(raw.ai?.when) ? raw.ai.when : 'pause',

@@ -24,6 +24,9 @@ import { putBlob, getBlob, deleteBlob, getAttachmentText, getAttachmentUrl, migr
 import { applyIcons, icons, fileIcon } from './icons.js';
 import logoSvg from './assets/img/logo.svg?raw';
 import configScript from '../scripts/configurar-ollama.ps1?raw';
+import {
+  saveToGoogleDrive, restoreFromGoogleDrive, createBackupBlob, restoreBackupText, backupRequirement,
+} from './google-drive.js';
 
 const ACCENTS = {
   cyan:   { dark: '#00d2ff', light: '#3a7bd5', bg: '#3a7bd5', rgb: '0, 210, 255' },
@@ -2899,6 +2902,166 @@ function bindBoardAndNotesEvents() {
   $('#appVersion').textContent = APP_VERSION;
 }
 
+/* ----------------------------- backup na nuvem ----------------------------- */
+
+let backupBusy = false;
+
+const formatDateTime = (iso) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
+function renderBackupStatus(text, kind = '') {
+  const status = $('#driveStatus');
+  if (!status) return;
+  status.textContent = text;
+  status.className = `backup-status${kind ? ` ${kind}` : ''}`;
+}
+
+function showBackupProgress(progress = {}) {
+  if (progress.stage === 'collect') renderBackupStatus('Lendo workspace e anexos…', 'is-busy');
+  else if (progress.stage === 'database') renderBackupStatus('Lendo os anexos salvos…', 'is-busy');
+  else if (progress.stage === 'read') {
+    renderBackupStatus(`Lendo ${progress.count || 0} anexo${progress.count === 1 ? '' : 's'}…`, 'is-busy');
+  } else if (progress.stage === 'upload') {
+    renderBackupStatus(`Enviando ${formatBytes(progress.size || 0)} para o Google Drive…`, 'is-busy');
+  } else if (progress.stage === 'download') renderBackupStatus('Baixando o backup do Google Drive…', 'is-busy');
+  else if (progress.stage === 'restore') renderBackupStatus('Restaurando workspace e anexos…', 'is-busy');
+}
+
+// Os botões de arquivo funcionam sempre; os do Drive só na origem localhost.
+function setBackupButtonsEnabled(enabled, driveEnabled) {
+  ['#driveSaveBtn', '#driveRestoreBtn'].forEach((selector) => {
+    const button = $(selector);
+    if (button) button.disabled = !enabled || !driveEnabled;
+  });
+  ['#driveExportBtn', '#driveImportBtn'].forEach((selector) => {
+    const button = $(selector);
+    if (button) button.disabled = !enabled;
+  });
+}
+
+function refreshBackupStatus() {
+  const saveBtn = $('#driveSaveBtn');
+  const restoreBtn = $('#driveRestoreBtn');
+  if (!saveBtn || !restoreBtn) return;
+
+  const requirement = backupRequirement();
+  if (requirement) {
+    setBackupButtonsEnabled(true, false);
+    saveBtn.title = requirement;
+    restoreBtn.title = requirement;
+    renderBackupStatus(requirement, 'is-error');
+    return;
+  }
+
+  saveBtn.title = '';
+  restoreBtn.title = '';
+  setBackupButtonsEnabled(true, true);
+  const last = state.drive?.lastBackupAt;
+  renderBackupStatus(
+    last ? `Último backup: ${formatDateTime(last)} (${state.drive?.fileName || 'open-winlin-prompt-backup.json'}).` : 'Nenhum backup feito ainda.',
+    last ? 'is-ok' : '',
+  );
+}
+
+async function runBackupAction(action) {
+  if (backupBusy) return;
+  backupBusy = true;
+  const saveBtn = $('#driveSaveBtn');
+  const saveLabel = $('#driveSaveLabel');
+  const others = ['#driveRestoreBtn', '#driveExportBtn', '#driveImportBtn'].map((selector) => $(selector));
+  if (saveBtn) saveBtn.disabled = true;
+  others.forEach((button) => { if (button) button.disabled = true; });
+  if (saveLabel) saveLabel.textContent = 'Trabalhando…';
+
+  let failed = false;
+  try {
+    await action();
+  } catch (err) {
+    failed = true;
+    const message = err?.message || 'Não foi possível concluir o backup.';
+    renderBackupStatus(message, 'is-error');
+    toast(message, 'error');
+  } finally {
+    backupBusy = false;
+    if (saveLabel) saveLabel.textContent = 'Salvar no Google Drive';
+    // não apaga a mensagem de erro com o "último backup" do rodapé
+    if (failed) setBackupButtonsEnabled(true, !backupRequirement());
+    else refreshBackupStatus();
+  }
+}
+
+function bindBackupEvents() {
+  if (!$('#driveSaveBtn')) return;
+
+  $('#driveSaveBtn').addEventListener('click', () => runBackupAction(async () => {
+    renderBackupStatus('Conectando à sua conta do Google…', 'is-busy');
+    const file = await saveToGoogleDrive({ onProgress: showBackupProgress });
+    state.drive = {
+      ...(state.drive || {}),
+      lastBackupAt: now(),
+      fileName: file?.name || 'open-winlin-prompt-backup.json',
+    };
+    persist({ immediate: true });
+    renderBackupStatus(`Backup salvo agora (${formatDateTime(state.drive.lastBackupAt)}).`, 'is-ok');
+    toast('Backup salvo no Google Drive');
+  }));
+
+  $('#driveRestoreBtn').addEventListener('click', () => {
+    pendingConfirm = () => runBackupAction(async () => {
+      renderBackupStatus('Entrando na sua conta do Google…', 'is-busy');
+      await restoreFromGoogleDrive({ onProgress: showBackupProgress });
+      toast('Backup restaurado — recarregando o app…');
+      setTimeout(() => window.location.reload(), 700);
+    });
+    $('#confirmTitle').textContent = 'Restaurar do Google Drive?';
+    $('#confirmMessage').textContent = 'O workspace atual (prompts, anexos, quadro de tarefas e notas) será substituído pelo backup da sua conta.';
+    $('#confirmDialog').show();
+  });
+
+  $('#driveExportBtn').addEventListener('click', () => runBackupAction(async () => {
+    renderBackupStatus('Montando o arquivo de backup…', 'is-busy');
+    const blob = await createBackupBlob({ onProgress: showBackupProgress });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `open-winlin-prompt-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    renderBackupStatus(`Backup salvo no computador (${formatBytes(blob.size)}).`, 'is-ok');
+    toast('Backup .json gerado');
+  }));
+
+  $('#driveImportBtn').addEventListener('click', () => $('#backupFileInput').click());
+  $('#backupFileInput').addEventListener('change', async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    let text = '';
+    try {
+      text = await file.text();
+      JSON.parse(text); // valida antes de pedir confirmação
+    } catch {
+      toast('O arquivo escolhido não é um backup válido', 'error');
+      return;
+    }
+    pendingConfirm = () => runBackupAction(async () => {
+      await restoreBackupText(text, { onProgress: showBackupProgress });
+      toast('Backup restaurado — recarregando o app…');
+      setTimeout(() => window.location.reload(), 700);
+    });
+    $('#confirmTitle').textContent = 'Restaurar este backup?';
+    $('#confirmMessage').textContent = `O workspace atual será substituído pelo conteúdo de “${file.name}”.`;
+    $('#confirmDialog').show();
+  });
+
+  refreshBackupStatus();
+}
+
 /* ---------------------------------- boot ---------------------------------- */
 
 // Logo (logo.svg) injetada inline para herdar a cor do tema via CSS.
@@ -2906,6 +3069,7 @@ document.querySelector('.app-mark').innerHTML = logoSvg;
 applyIcons();
 bindEvents();
 bindBoardAndNotesEvents();
+bindBackupEvents();
 renderAll();
 persist({ immediate: true });
 // verifica atualizações em silêncio (se não houver internet, ignora)

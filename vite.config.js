@@ -10,6 +10,9 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
+  // o login do Google (backup no Drive) exige exatamente esta origem
+  server: { port: 43210, strictPort: true },
+  preview: { port: 43210, strictPort: true },
   build: {
     target: 'es2022',
     cssCodeSplit: false,

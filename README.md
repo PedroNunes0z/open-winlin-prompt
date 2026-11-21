@@ -60,6 +60,7 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 - **Ações sobre a seleção** — selecione um texto e **solte o mouse**: aparecem **Reduzir**, **Aumentar** e **Corrigir gramática** (a caixa só aparece ao soltar, nunca durante o arrasto);
 - **Quadro de tarefas** — post-its coloridos (6 cores), arrastáveis entre as colunas **A fazer / Em andamento / Concluído**, com ponta dobrada e fita adesiva; clique para editar, arraste para reordenar e alterne para a **lista de tarefas**;
 - **Notas e lembretes** — folhas de papel pautado (linhas e margem), título, corpo e lembrete com data/hora, em 6 cores de papel; a lista mostra o prazo e destaca o que venceu;
+- **Backup na nuvem (Google Drive)** — um único `open-winlin-prompt-backup.json` com prompts, anexos (base64), quadro de tarefas e notas; restaurar em qualquer PC com um clique (ou pelo arquivo `.json`);
 - **Verificação de atualizações** — em **Configurações → Atualizações** o app compara sua versão com a última Release do GitHub e oferece o botão **Baixar atualização** (um ponto colorido na engrenagem avisa quando há versão nova);
 - **Biblioteca do projeto** — cadastre **APIs** (provedor, URLs, chave e modelos), **IDEs** e **WebSites** e insira no prompt sem a chave;
 - **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB), abertos em **aba própria** (sem janela/modal);
@@ -110,7 +111,8 @@ open-winlin-prompt-setup.exe --silent
 Se preferir não usar o instalador, baixe direto o
 [`open-winlin-prompt.zip`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip),
 extraia onde quiser e execute **`Abrir Open Winlin Prompt.cmd`**.
-(Se o app não reconhecer o Ollama, rode o `Configurar Ollama.cmd`.)
+O app abre em `http://localhost:43210` servido por uma janela minimizada do PowerShell
+(feche essa janela para encerrar o servidor). Se o app não reconhecer o Ollama, rode o `Configurar Ollama.cmd`.
 
 ### Manual (desenvolvimento)
 
@@ -123,7 +125,8 @@ npm ci
 npm run build
 ```
 
-Depois abra a pasta `dist` e execute **`Abrir Open Winlin Prompt.cmd`** (ou abra o `dist/index.html` no navegador).
+Depois execute **`Abrir Open Winlin Prompt.cmd`** — o app abre em `http://localhost:43210`.
+Para desenvolver com recarregamento, use `npm run dev` (Vite já configurado na porta 43210).
 
 Para gerar uma release (o workflow compila e anexa o `.zip` automaticamente):
 
@@ -157,6 +160,24 @@ As sugestões usam o [Ollama](https://ollama.com/download) com o modelo **Qwen2.
 2. Se você usou o pacote pronto (zip) e o app não reconhecer o Ollama, execute **`Configurar Ollama.cmd`** — ele abre uma janela de progresso e resolve sozinho;
 3. Nas **Configurações** (engrenagem), baixe o modelo e ligue as sugestões.
 
+## Backup na nuvem (Google Drive)
+
+O app roda em **`http://localhost:43210`** (sirva com o servidor local incluído), porque o login do Google não funciona em `file://`.
+Em **Configurações → Backup na nuvem**:
+
+- **Salvar no Google Drive** — empacota workspace + anexos + quadro + notas em `open-winlin-prompt-backup.json` (envio retomável, aceita arquivos grandes) e atualiza o mesmo arquivo nas próximas vezes;
+- **Restaurar do Drive** — baixa o backup da sua conta e recarrega o app com tudo no lugar;
+- **Baixar backup (.json)** e **Restaurar de arquivo** — mesma coisa sem internet/Drive, ótimo para migrar de computador.
+
+Se aparecer o erro *"O Google recusou esta origem"*, cadastre `http://localhost:43210` em
+**Origens JavaScript autorizadas** do seu Client ID no [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+(APIs e serviços → Credenciais → seu OAuth 2.0 Client ID).
+
+> **Migrando da versão em `file://`:** os dados antigos ficam em outra origem. Abra `dist/index.html` direto no navegador (versão nova), use **Baixar backup (.json)** e depois, no app em `localhost:43210`, use **Restaurar de arquivo**.
+
+Como o app deixou de usar `file://`, o Ollama recebe requisições vindas de `http://localhost:43210`:
+mantenha `OLLAMA_ORIGINS=*` (o instalador já configura isso). Para desenvolvimento, `npm run dev` sobe o Vite na porta 43210.
+
 ## Estrutura do projeto
 
 ```
@@ -168,11 +189,13 @@ open-winlin-prompt/
 ├── Configurar Ollama.cmd            # liberação do Ollama p/ o app
 ├── Abrir Open Winlin Prompt.cmd     # atalho do programa
 ├── scripts/configurar-ollama.ps1    # script de configuração da IA
+├── scripts/servidor.ps1             # servidor local em http://localhost:43210
 ├── src/
 │   ├── main.js                      # interface, biblioteca, IA, histórico
 │   ├── editor.js                    # editor + formatação inline
 │   ├── markdown.js                  # renderização GFM + KaTeX
 │   ├── attachment-data.js           # anexos no IndexedDB
+│   ├── google-drive.js              # backup na nuvem (OAuth + Drive)
 │   ├── store.js                     # workspace (localStorage)
 │   ├── mentions.js                  # referências @
 │   ├── icons.js                     # ícones Fluent

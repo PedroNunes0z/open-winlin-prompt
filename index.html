@@ -6,6 +6,8 @@
   <meta name="color-scheme" content="dark light" />
   <link rel="icon" href="./src/assets/img/logo.svg" />
   <title>Open Winlin Prompt</title>
+  <!-- login do Google (backup no Drive) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 <div id="app" class="app">
@@ -72,6 +74,26 @@
           <span data-icon="arrow-down"></span> Baixar atualização
         </button>
       </div>
+      <div class="settings-panel__title settings-panel__title--spaced">Backup na nuvem</div>
+      <div class="backup-box">
+        <p class="backup-hint">Guarda prompts, anexos, quadro de tarefas e notas em um único arquivo <b>open-winlin-prompt-backup.json</b> na sua conta do Google Drive.</p>
+        <button type="button" class="update-cta" id="driveSaveBtn">
+          <span data-icon="cloud-upload"></span>
+          <span id="driveSaveLabel">Salvar no Google Drive</span>
+        </button>
+        <div class="backup-actions">
+          <button type="button" class="backup-secondary" id="driveRestoreBtn">
+            <span data-icon="cloud-download"></span> Restaurar do Drive
+          </button>
+        </div>
+        <div class="backup-divider"><span>ou em arquivo</span></div>
+        <div class="backup-actions">
+          <button type="button" class="backup-secondary" id="driveExportBtn">Baixar backup (.json)</button>
+          <button type="button" class="backup-secondary" id="driveImportBtn">Restaurar de arquivo</button>
+        </div>
+        <div id="driveStatus" class="backup-status">Nenhum backup feito ainda.</div>
+      </div>
+
       <div class="settings-panel__title settings-panel__title--spaced">Sugestões de escrita</div>
       <p class="ai-desc">A IA roda no seu computador (Ollama) e sugere o próximo trecho enquanto você escreve. Nada é enviado para a internet.</p>
       <div class="ai-model">
@@ -404,6 +426,7 @@
 </fluent-dialog>
 
 <input type="file" id="fileInput" multiple hidden />
+<input type="file" id="backupFileInput" accept="application/json,.json" hidden />
 <input type="file" id="importInput" accept="application/json,.json" hidden />
 <div id="toasts" class="toasts" aria-live="polite"></div>
 
