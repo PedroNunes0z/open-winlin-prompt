@@ -4,12 +4,11 @@
 // O login do Google só funciona quando a página está em http://localhost:43210
 // (origem autorizada no Google Cloud). O módulo avisa quando está em file://.
 
-const CLIENT_ID = '242368795086-f0lk0mjncpsvok2n2n3s2r08r6f3iosv.apps.googleusercontent.com';
+const CLIENT_ID = '242368795086-ekkpmpghhl696g5eb24he558s26h895q.apps.googleusercontent.com';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const BACKUP_FILENAME = 'open-winlin-prompt-backup.json';
 const APP_TAG = 'open-winlin-prompt';
 const ALLOWED_ORIGIN = 'http://localhost:43210';
-
 const DRIVE_FILES = 'https://www.googleapis.com/drive/v3/files';
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
