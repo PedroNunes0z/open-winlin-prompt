@@ -38,6 +38,7 @@ jobs:
           Copy-Item -Path "Configurar Ollama.cmd" -Destination package/
           Copy-Item -Path "README.md" -Destination package/
           Copy-Item -Path "LICENSE" -Destination package/
+          Copy-Item -Path "src/assets/logo.ico" -Destination package/logo.ico
           if (Test-Path scripts) { Copy-Item -Path scripts -Destination package/scripts -Recurse }
           if (Test-Path "Instalar.ps1") { Copy-Item -Path "Instalar.ps1" -Destination package/ }
           Compress-Archive -Path package/* -DestinationPath open-winlin-prompt.zip -Force
@@ -46,7 +47,7 @@ jobs:
       - name: Compilar o instalador .exe (pacote embutido)
         shell: pwsh
         run: |
-          ./installer/build-exe.ps1 -Pacote open-winlin-prompt.zip -Saida open-winlin-prompt-setup.exe
+          ./installer/build-exe.ps1 -Pacote open-winlin-prompt.zip -Saida open-winlin-prompt-setup.exe -Icone src/assets/logo.ico
           Get-Item open-winlin-prompt-setup.exe | Format-List Name, Length
 
       - name: Guardar artefatos

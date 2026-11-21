@@ -2,7 +2,8 @@
 # Uso: powershell -ExecutionPolicy Bypass -File installer/build-exe.ps1 -Pacote open-winlin-prompt.zip
 param(
     [string]$Pacote = 'open-winlin-prompt.zip',
-    [string]$Saida  = 'open-winlin-prompt-setup.exe'
+    [string]$Saida  = 'open-winlin-prompt-setup.exe',
+    [string]$Icone  = 'src/assets/logo.ico'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +33,12 @@ $cscArgs = @(
     '/r:System.Drawing.dll'
 )
 if (Test-Path $manifest) { $cscArgs += "/win32manifest:$manifest" }
+
+# ícone do .exe (e do atalho) vem de src/assets/logo.ico
+$iconePath = Join-Path $root $Icone
+if (-not (Test-Path -LiteralPath $iconePath)) { $iconePath = Join-Path (Get-Location) $Icone }
+if (Test-Path -LiteralPath $iconePath) { $cscArgs += "/win32icon:$iconePath" }
+else { Write-Warning "Icone nao encontrado: $Icone" }
 $cscArgs += $source
 
 & $csc @cscArgs

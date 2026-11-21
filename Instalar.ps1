@@ -462,8 +462,13 @@ $workerScript = {
             $link.TargetPath       = Join-Path $TargetDir 'Abrir Open Winlin Prompt.cmd'
             $link.WorkingDirectory = $TargetDir
             $link.Description      = 'Open Winlin Prompt'
-            $iconFile = Get-ChildItem -Path $TargetDir -Filter '*.ico' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($iconFile) { $link.IconLocation = $iconFile.FullName }
+            # ícone do atalho: logo.ico do pacote (ou o primeiro .ico encontrado)
+            $iconFile = Join-Path $TargetDir 'logo.ico'
+            if (-not (Test-Path -LiteralPath $iconFile)) {
+                $found = Get-ChildItem -Path $TargetDir -Filter '*.ico' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) { $iconFile = $found.FullName }
+            }
+            if (Test-Path -LiteralPath $iconFile) { $link.IconLocation = $iconFile }
             $link.Save()
             Add-Log "Atalho criado: $linkPath"
         }

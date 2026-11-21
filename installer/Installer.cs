@@ -20,6 +20,12 @@ internal static class Installer
 {
     private const string AppName = "Open Winlin Prompt";
 
+    /// <summary>Ícone do app (logo.ico enviado junto com o pacote).</summary>
+    public static string IconFile
+    {
+        get { return Path.Combine(TargetDir, "logo.ico"); }
+    }
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -159,7 +165,8 @@ internal static class Installer
             linkType.InvokeMember("TargetPath", BindingFlags.SetProperty, null, link, new object[] { Path.Combine(TargetDir, "Abrir Open Winlin Prompt.cmd") });
             linkType.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, link, new object[] { TargetDir });
             linkType.InvokeMember("Description", BindingFlags.SetProperty, null, link, new object[] { AppName });
-            linkType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, link, new object[] { Path.Combine(TargetDir, "dist", "index.html") + ",0" });
+            string icon = File.Exists(IconFile) ? IconFile : Path.Combine(TargetDir, "dist", "index.html");
+            linkType.InvokeMember("IconLocation", BindingFlags.SetProperty, null, link, new object[] { icon });
             linkType.InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
             return linkPath;
         }
@@ -222,6 +229,15 @@ internal sealed class SetupForm : Form
         BackColor = Color.FromArgb(24, 26, 32);
         ForeColor = Color.FromArgb(233, 233, 244);
         Font = new Font("Segoe UI", 9.5f);
+
+        try
+        {
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+        }
+        catch
+        {
+            // sem ícone embutido: mantém o padrão
+        }
 
         var title = new Label();
         title.Text = "Open Winlin Prompt";
