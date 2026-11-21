@@ -178,6 +178,17 @@
         <fluent-button id="emptyNewBtn" appearance="accent">Criar prompt</fluent-button>
       </div>
 
+      <div id="attachmentView" class="attachment-view hidden">
+        <div class="pane__head">
+          <span class="pane__title"><span data-icon="file" id="attachmentViewIcon"></span> <span id="attachmentViewName">Anexo</span></span>
+          <div class="pane__head-actions">
+            <span class="pane__meta" id="attachmentViewMeta"></span>
+            <fluent-button id="attachmentViewDownload" appearance="stealth" size="small">Baixar</fluent-button>
+          </div>
+        </div>
+        <div id="attachmentViewBody" class="attachment-preview attachment-preview--tab"></div>
+      </div>
+
       <div id="split" class="split">
         <div class="pane pane--editor" id="editorPane">
           <div class="pane__head">
@@ -297,17 +308,6 @@
     <div id="libraryDetail"></div>
     <div class="dialog__actions">
       <fluent-button id="libraryDetailClose" appearance="stealth">Fechar</fluent-button>
-    </div>
-  </div>
-</fluent-dialog>
-
-<fluent-dialog id="attachmentPreviewDialog" dialog-label="Pré-visualização do anexo">
-  <div class="dialog dialog--wide">
-    <div class="dialog__title" id="attachmentPreviewName">Anexo</div>
-    <div id="attachmentPreviewBody" class="attachment-preview"></div>
-    <div class="dialog__actions">
-      <fluent-button id="attachmentPreviewDownload" appearance="stealth">Baixar</fluent-button>
-      <fluent-button id="attachmentPreviewClose" appearance="accent">Fechar</fluent-button>
     </div>
   </div>
 </fluent-dialog>

@@ -2,15 +2,45 @@
 // O texto continua sendo markdown cru (editável); os trechos formatados recebem
 // apenas classes visuais (negrito, título, código, link etc.).
 
-export function readEditor(editor) {
+// Blocos que o próprio navegador cria ao apertar Enter (<div>, <p>…).
+// Cada um deles vale por uma linha — sem isso, o Enter some na releitura
+// e era preciso apertar várias vezes para a linha realmente quebrar.
+const BLOCK_TAGS = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE|PRE|SECTION|ARTICLE)$/;
+
+function readNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+  if (node.nodeType !== Node.ELEMENT_NODE) return '';
+  if (node.classList?.contains('mention-tag')) {
+    return `@${node.dataset.mention || node.textContent.replace(/^@/, '')}`;
+  }
+  // o texto fantasma da sugestão nunca faz parte do documento
+  if (node.classList?.contains('ghost-suggestion')) return '';
+  if (node.tagName === 'BR') return '\n';
+  if (BLOCK_TAGS.test(node.tagName)) {
+    const inner = readChildren(node);
+    return inner === '' ? '\n' : `${inner.endsWith('\n') ? inner : `${inner}\n`}`;
+  }
+  return readChildren(node);
+}
+
+function readChildren(parent) {
   let text = '';
-  for (const node of editor.childNodes) {
-    if (node.nodeType === Node.TEXT_NODE) text += node.textContent;
-    else if (node.classList?.contains('mention-tag')) text += `@${node.dataset.mention || node.textContent.replace(/^@/, '')}`;
-    else if (node.tagName === 'BR') text += '\n';
-    else text += node.textContent;
+  const nodes = parent.childNodes;
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    // O navegador deixa um <br> extra no final apenas para o cursor aparecer
+    // ("texto<br><br>"): esse último não é uma linha nova de verdade.
+      if (node.tagName === 'BR' && i === nodes.length - 1 && (text === '' || text.endsWith('\n'))) continue;
+    const isBlock = node.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.test(node.tagName);
+    // separa o bloco anterior do próximo sem duplicar quebras já existentes
+    if (isBlock && text && !text.endsWith('\n')) text += '\n';
+    text += readNode(node);
   }
   return text;
+}
+
+export function readEditor(editor) {
+  return readChildren(editor);
 }
 
 export function makeChip(name) {
@@ -160,7 +190,18 @@ export function writeEditor(editor, text = '', names = [], { preserveCaret = fal
   }
 
   editor.appendChild(fragment);
+  ensureTrailingBreak(editor);
   if (savedCaret != null) placeCaret(editor, savedCaret);
+}
+
+// Em pre-wrap, uma quebra no fim do documento não aparece (o cursor ficaria no
+// fim da linha anterior). Um <br> no final cria a linha vazia de verdade.
+function ensureTrailingBreak(editor) {
+  const last = editor.lastChild;
+  if (!last) { editor.appendChild(document.createElement('br')); return; }
+  if (last.nodeName === 'BR') return;
+  const text = last.textContent || '';
+  if (text.endsWith('\n')) editor.appendChild(document.createElement('br'));
 }
 
 export function insertText(editor, text, { selectFrom, selectTo } = {}) {
@@ -180,6 +221,7 @@ export function insertText(editor, text, { selectFrom, selectTo } = {}) {
     node = document.createTextNode(text);
     editor.appendChild(node);
   }
+  ensureTrailingBreak(editor);
   editor.focus();
 
   if (Number.isInteger(selectFrom)) {

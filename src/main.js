@@ -129,26 +129,82 @@ const OLLAMA_URL = 'http://localhost:11434';
 const AI_MODEL = 'qwen2.5-coder:1.5b';
 const AI_SIZES = { short: { tokens: 48, lines: 1 }, medium: { tokens: 96, lines: 2 }, long: { tokens: 256, lines: 6 } };
 
+// Ajustes de velocidade x consistência:
+// - contexto curto (2048) e trechos menores = resposta mais rápida;
+// - temperatura baixa + top_k/top_p + seed fixa = sugestões previsíveis;
+// - stop no fim de bloco = sugestão enxuta.
+const AI_OPTIONS = { temperature: 0.1, top_k: 20, top_p: 0.9, repeat_penalty: 1.05, num_ctx: 2048, seed: 42 };
+const AI_CONTEXT = { prefix: 1200, suffix: 400 };
+const AI_DEBOUNCE = { typing: 450, pause: 950 };
+const AI_WARMUP = { model: AI_MODEL, keep_alive: '30m' };
+
 // Sugestão curta e direta: corta no primeiro bloco (linha em branco) e no limite de linhas.
+// As linhas vazias do começo não podem contar no limite (senão a sugestão
+// vira string vazia quando o modelo começa com uma quebra de linha).
 function limitSuggestion(text, size) {
-  return text.split('\n\n')[0].split('\n').slice(0, size.lines).join('\n').trim();
+  const block = text.split('\n\n')[0];
+  // a quebra inicial faz parte da sugestão (ex.: depois de "def f():" ela é
+  // obrigatória); só não conta no limite de linhas
+  const lead = (block.match(/^\n+/) || [''])[0];
+  const body = block.slice(lead.length);
+  if (!body.trim()) return '';
+  const lines = body.split('\n').slice(0, size.lines).join('\n').replace(/\s+$/, '');
+  return lead + lines;
+}
+
+// Durante o streaming: descarta repetição da última linha e mantém só o bloco atual.
+function previewSuggestion(text, prefix, size) {
+  if (!text) return '';
+  let out = text;
+  const lastLine = (prefix.split('\n').pop() || '').trim();
+  const start = out.replace(/^[ \t]+/, '');
+  // o modelo às vezes recomeça a linha atual: remove o trecho repetido
+  if (lastLine.length >= 4) {
+    if (start.startsWith(lastLine)) out = start.slice(lastLine.length).replace(/^[ \t]*\n?/, '');
+    else {
+      const head = lastLine.slice(0, Math.min(24, Math.floor(lastLine.length / 2)));
+      if (head.length >= 6 && start.startsWith(head)) out = start.slice(head.length);
+    }
+  }
+  return limitSuggestion(out, size);
 }
 
 // Evita repetir o que já existe no texto: tira linhas geradas que já estão
 // no prefixo/sufixo e descarta a sugestão se for repetição pura.
 function dedupeSuggestion(suggestion, prefix, suffix) {
   if (!suggestion) return '';
+  // a quebra de linha inicial faz parte da sugestão ("def f():" → "\n    ...")
+  const lead = (suggestion.match(/^\n+/) || [''])[0];
+  const body = suggestion.slice(lead.length);
+  if (!body.trim()) return '';
   const normLines = (t) => t.split('\n').map((l) => l.trim()).filter(Boolean);
   const known = new Set([...normLines(prefix), ...normLines(suffix)]);
-  const lines = suggestion.split('\n');
+  const lines = body.split('\n');
   while (lines.length > 1 && known.has(lines[0].trim())) lines.shift();
   while (lines.length > 1 && known.has(lines[lines.length - 1].trim())) lines.pop();
-  const result = lines.join('\n').trim();
+  let result = lines.join('\n').trim();
+  if (!result) return '';
+  // não repete o final do texto que já está antes do cursor
+  const tail = (prefix.split('\n').pop() || '').trim();
+  if (tail.length >= 6 && result.startsWith(tail)) result = result.slice(tail.length).trim();
   if (!result) return '';
   if (suffix.includes(result) || prefix.includes(result)) return '';
+  // sugestão que só repete o que o texto já tem (antes ou depois)
+  const suffixHead = suffix.trimStart();
+  if (suffixHead.length > 12 && suffixHead.startsWith(result)) return '';
   const resultLines = normLines(result);
   if ((resultLines.length >= 2 || result.length > 40) && resultLines.every((l) => known.has(l))) return '';
-  return result;
+  // pontuação solta não ajuda em nada
+  if (!/[\p{L}\p{N}]/u.test(result)) return '';
+
+  // Bloco Python ("def f():" / "if x:") espera corpo identado: se o modelo
+  // devolveu a primeira linha sem identação, corrigimos para o texto ser válido.
+  const lastPrefixLine = (prefix.split('\n').pop() || '').trimEnd();
+  if (lead && /:$/.test(lastPrefixLine) && !/^\s/.test(result)) {
+    result = result.split('\n').map((line) => (line.trim() ? `    ${line}` : line)).join('\n');
+  }
+
+  return lead + result;
 }
 
 // Tamanho automático: decide o quanto pedir pelo contexto onde está o cursor.
@@ -156,10 +212,13 @@ function resolveAiSize(ai, prefix) {
   const preset = AI_SIZES[ai.size];
   if (preset) return preset;
   const lastLine = prefix.split('\n').pop() || '';
+  const trimmed = lastLine.trimEnd();
   const inCodeBlock = (prefix.match(/```/g) || []).length % 2 === 1;
-  if (inCodeBlock) {
-    // dentro de código: abre bloco novo pede mais; no meio de uma linha, menos
-    return /[{(]\s*$/.test(lastLine) ? AI_SIZES.long : AI_SIZES.medium;
+  // linha que abre um bloco ({, (, [, =>) pede o bloco inteiro
+  // {, (, [, => ou ":" no fim (Python) abrem um bloco
+  const opensBlock = /[{([]$/.test(trimmed) || /=>$/.test(trimmed) || /:$/.test(trimmed);
+  if (inCodeBlock || opensBlock) {
+    return opensBlock ? AI_SIZES.long : AI_SIZES.medium;
   }
   if (/^\s*$/.test(lastLine)) return AI_SIZES.medium; // parágrafo novo
   if (/^#{1,6}\s/.test(lastLine)) return AI_SIZES.short; // título: só completa a linha
@@ -178,6 +237,42 @@ let aiAbortGen = null;
 let aiTimer = null;
 let aiSuggestionText = null;
 let aiLastGen = null; // { status: 'busy'|'ok'|'error', ms, at }
+let aiWarmedUp = false;
+let aiCache = { key: '', text: '' }; // mesma situação (texto anterior + seguinte) = mesma sugestão
+let aiRequestToken = null;
+
+// Carrega o modelo na memória antes do primeiro pedido: a primeira sugestão
+// deixa de levar vários segundos (carregamento do GGUF no Ollama).
+let aiWarmupPromise = null;
+function warmAiModel() {
+  if (aiWarmedUp) return Promise.resolve();
+  if (!aiModelReady || aiDownloading) return Promise.resolve();
+  if (!aiWarmupPromise) aiWarmupPromise = doWarmAiModel();
+  return aiWarmupPromise;
+}
+
+async function doWarmAiModel() {
+  try {
+    const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: AI_WARMUP.model,
+        prompt: 'a',
+        stream: false,
+        raw: true,
+        keep_alive: AI_WARMUP.keep_alive,
+        // o mesmo num_ctx da geração: se mudar, o Ollama recarrega o modelo
+        options: { num_predict: 1, num_ctx: AI_OPTIONS.num_ctx, temperature: 0 },
+      }),
+    });
+    aiWarmedUp = res.ok;
+  } catch {
+    aiWarmedUp = false;
+  } finally {
+    aiWarmupPromise = null;
+  }
+}
 
 const aiSettings = () => {
   state.ai ||= { enabled: false, when: 'pause', size: 'auto', model: AI_MODEL };
@@ -281,6 +376,7 @@ async function checkAiModel() {
         : 'Ollama aberto, mas o modelo ainda não foi baixado. Baixe para começar.',
       aiModelReady ? 'ok' : '',
     );
+    if (aiModelReady) warmAiModel();
   } catch {
     aiOllamaUp = false;
     aiModelReady = false;
@@ -361,6 +457,8 @@ async function downloadAiModel() {
       }
     }
     aiModelReady = true;
+    aiCache = { key: '', text: '' };
+    warmAiModel(); // já carrega na memória para a primeira sugestão ser rápida
     setAiStatus('Pronto! Modelo baixado e pronto para usar.', 'ok');
     toast('Modelo de IA baixado. As sugestões já funcionam!');
   } catch (err) {
@@ -390,23 +488,55 @@ function aiCaretContext() {
   return { prefix: text.slice(0, offset), suffix: text.slice(offset) };
 }
 
+// Posição do cursor (offset no texto) — usada para garantir que a sugestão
+// ainda corresponde ao lugar onde o usuário está escrevendo.
+function caretOffsetNow() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !els.editor.contains(selection.getRangeAt(0).startContainer)) return null;
+  const range = selection.getRangeAt(0);
+  const before = range.cloneRange();
+  before.selectNodeContents(els.editor);
+  before.setEnd(range.startContainer, range.startOffset);
+  return before.toString().length;
+}
+
 async function requestAiSuggestion() {
   const ai = aiSettings();
   if (!ai.enabled || !aiModelReady || aiDownloading) return;
   hideAiSuggestion(); // o texto fantasma não pode entrar no contexto do pedido
   const ctx = aiCaretContext();
   if (!ctx || !ctx.prefix.trim()) return;
-  const prefix = ctx.prefix.slice(-2000);
-  const suffix = ctx.suffix.slice(0, 1000); // sufixo maior: o modelo vê mais do que já existe
+
+  const size = resolveAiSize(ai, ctx.prefix);
+  const prefix = ctx.prefix.slice(-AI_CONTEXT.prefix);
+  const suffix = ctx.suffix.slice(0, AI_CONTEXT.suffix);
+  const caretAt = ctx.prefix.length;
+
+  // Mesma situação de antes? Reaproveita a sugestão (resposta instantânea).
+  const key = `${size.tokens}|${prefix.slice(-200)}|${suffix.slice(0, 160)}`;
+  if (aiCache.key === key) {
+    if (aiCache.text) showAiSuggestion(aiCache.text);
+    return;
+  }
+
   aiAbortGen?.abort();
   aiAbortGen = new AbortController();
   const myController = aiAbortGen;
-  const size = resolveAiSize(ai, prefix);
+  const token = {};
+  aiRequestToken = token;
   aiLastGen = { status: 'busy', ms: 0, at: Date.now() };
   updateAiStatusBar();
   const startedAt = performance.now();
   let full = '';
+  let firstTokenAt = 0;
+
+  // Se o cursor sair do lugar (usuário continuou digitando), descarta tudo.
+  const stale = () => aiAbortGen !== myController || caretOffsetNow() !== caretAt;
+
   try {
+    // primeira vez: espera o modelo carregar (evita a resposta truncada do cold start)
+    if (!aiWarmedUp) await warmAiModel();
+    if (stale()) return;
     const res = await fetch(`${OLLAMA_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -418,10 +548,13 @@ async function requestAiSuggestion() {
         // raw: true desliga o template de conversa do Ollama — sem ele, o modelo
         // responde como chat ("Claro!...") em vez de completar o texto (FIM).
         raw: true,
-        keep_alive: '30m', // mantém o modelo carregado: evita recarregar a cada pedido
-        // stop na linha em branco: o modelo para ao fim do bloco atual,
-        // sem emendar a próxima função/seção — a sugestão fica enxuta.
-        options: { temperature: 0.1, num_predict: size.tokens, num_ctx: 4096, stop: ['\n\n', '<|endoftext|>'] },
+        keep_alive: AI_WARMUP.keep_alive, // mantém o modelo carregado entre pedidos
+        options: {
+          ...AI_OPTIONS,
+          num_predict: size.tokens,
+          // para no fim do bloco atual, sem emendar a próxima seção
+          stop: ['\n\n', '<|endoftext|>', '<|fim_pad|>'],
+        },
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -437,41 +570,55 @@ async function requestAiSuggestion() {
         const line = buffer.slice(0, newline);
         buffer = buffer.slice(newline + 1);
         if (!line.trim()) continue;
-        try { full += JSON.parse(line).response || ''; } catch { /* linha parcial */ }
+        try {
+          const chunk = JSON.parse(line).response || '';
+          if (chunk && !firstTokenAt) firstTokenAt = performance.now();
+          full += chunk;
+        } catch { /* linha parcial */ }
       }
-      if (full.trim() && aiAbortGen === myController) showAiSuggestion(limitSuggestion(full, size) || full);
+      if (full.trim() && !stale()) {
+        const preview = previewSuggestion(full, prefix, size);
+        if (preview) showAiSuggestion(preview);
+      }
     }
     if (buffer.trim()) {
       try { full += JSON.parse(buffer).response || ''; } catch { /* fim de fluxo */ }
     }
+    if (stale()) return; // cursor mudou: descarta silenciosamente
+
     const limited = limitSuggestion(full, size);
     const suggestion = dedupeSuggestion(limited, prefix, suffix);
-    if (aiAbortGen !== myController) return; // substituída por um pedido mais novo
     if (suggestion) {
-      aiLastGen = { status: 'ok', ms: performance.now() - startedAt, at: Date.now() };
+      aiCache = { key, text: suggestion };
+      aiLastGen = { status: 'ok', ms: performance.now() - startedAt, at: Date.now(), first: firstTokenAt ? firstTokenAt - startedAt : 0 };
       showAiSuggestion(suggestion);
     } else if (limited) {
       // gerou, mas era só repetição do que já existe: descarta sem erro
+      aiCache = { key, text: '' };
       aiLastGen = { status: 'ok', ms: performance.now() - startedAt, at: Date.now() };
       hideAiSuggestion();
     } else {
       // resposta vazia (o texto já está completo): não é falha
+      aiCache = { key, text: '' };
       aiLastGen = null;
       hideAiSuggestion();
     }
   } catch {
-    if (aiAbortGen !== myController) return; // cancelada por um pedido mais novo: não é falha
-    if (myController.signal.aborted) {
-      // aceita/ignora no meio do streaming: não é erro
-      aiLastGen = full.trim()
-        ? { status: 'ok', ms: performance.now() - startedAt, at: Date.now() }
-        : null;
+    if (aiAbortGen !== myController || myController.signal.aborted) {
+      // cancelada por um pedido mais novo ou pelo usuário: não é falha
+      if (aiAbortGen === myController && full.trim()) {
+        aiLastGen = { status: 'ok', ms: performance.now() - startedAt, at: Date.now() };
+      }
       return;
     }
+    // modelo ainda carregando/instável: tenta de novo depois do aquecimento
+    if (!aiWarmedUp) warmAiModel();
+    aiWarmedUp = false;
     aiLastGen = { status: 'error', ms: performance.now() - startedAt, at: Date.now() };
     hideAiSuggestion();
     /* sugestão é opcional: a falha aparece só na barra inferior, sem interromper a escrita */
   } finally {
+    if (aiRequestToken === token) aiRequestToken = null;
     updateAiStatusBar();
   }
 }
@@ -523,7 +670,8 @@ function scheduleAiSuggestion() {
   hideAiSuggestion();
   const ai = aiSettings();
   if (!ai.enabled || !aiModelReady || ai.when === 'manual') return;
-  aiTimer = setTimeout(() => requestAiSuggestion(), ai.when === 'typing' ? 700 : 1300);
+  // atraso curto: a sugestão aparece logo depois de parar de digitar
+  aiTimer = setTimeout(() => requestAiSuggestion(), AI_DEBOUNCE[ai.when] || AI_DEBOUNCE.pause);
 }
 
 /* ------------- ações sobre o texto selecionado (IA local) ------------- */
@@ -955,7 +1103,10 @@ function setActiveProject(id) {
 }
 
 function openPrompt(id) {
-  if (state.activePromptId === id && state.openTabs.includes(id)) return;
+  const hadAttachment = Boolean(state.attachmentView);
+  state.attachmentView = null;
+  // voltar da aba de anexo para a aba já ativa precisa redesenhar
+  if (!hadAttachment && state.activePromptId === id && state.openTabs.includes(id)) return;
   state.activePromptId = id;
   if (!state.openTabs.includes(id)) state.openTabs.push(id);
   persist();
@@ -1116,11 +1267,15 @@ function renderTree() {
 }
 
 function renderTabs() {
-  els.tabs.classList.toggle('hidden', state.openTabs.length === 0);
-  els.tabs.innerHTML = state.openTabs.map((id) => {
+  const project = getActiveProject();
+  const attachment = state.attachmentView ? project.attachments.find((a) => a.id === state.attachmentView) : null;
+  if (state.attachmentView && !attachment) state.attachmentView = null;
+
+  els.tabs.classList.toggle('hidden', state.openTabs.length === 0 && !attachment);
+  const promptTabs = state.openTabs.map((id) => {
     const found = findPromptById(id);
     if (!found) return '';
-    const active = id === state.activePromptId ? 'is-active' : '';
+    const active = !attachment && id === state.activePromptId ? 'is-active' : '';
     return `
       <div class="tab ${active}" data-id="${escapeHtml(id)}" role="tab" aria-selected="${active === 'is-active'}" title="${escapeHtml(found.prompt.name)}">
         <span class="tab__icon" data-icon="file-text"></span>
@@ -1128,17 +1283,32 @@ function renderTabs() {
         <button class="tab__close" data-close="${escapeHtml(id)}" title="Fechar" data-icon="close"></button>
       </div>`;
   }).join('');
+
+  const attachmentTab = attachment ? `
+      <div class="tab tab--attachment is-active" data-attachment="${escapeHtml(attachment.id)}" role="tab" aria-selected="true" title="${escapeHtml(attachment.name)}">
+        <span class="tab__icon" data-icon="${escapeHtml(fileIcon(attachment.name, attachment.type))}"></span>
+        <span class="tab__name">${escapeHtml(attachment.name)}</span>
+        <button class="tab__close" data-close-attachment="1" title="Fechar" data-icon="close"></button>
+      </div>` : '';
+
+  els.tabs.innerHTML = promptTabs + attachmentTab;
   applyIcons(els.tabs);
 
   els.tabs.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close-attachment]')) {
+        closeAttachmentPreview();
+        return;
+      }
       if (e.target.closest('[data-close]')) {
         closeTab(tab.dataset.id);
         return;
       }
+      if (tab.dataset.attachment) return; // já é a aba ativa
       if (findPromptById(tab.dataset.id)?.project.id !== getActiveProject().id) {
         setActiveProject(findPromptById(tab.dataset.id).project.id);
       }
+      // openPrompt cuida de fechar a aba de anexo e redesenhar
       openPrompt(tab.dataset.id);
     });
   });
@@ -1160,6 +1330,22 @@ function updatePreview(source) {
 function renderEditor() {
   hideAiSuggestion();
   const { project, prompt } = currentPrompt();
+
+  // aba de anexo: a área do editor dá lugar à pré-visualização do arquivo
+  const attachment = state.attachmentView ? project.attachments.find((a) => a.id === state.attachmentView) : null;
+  $('#attachmentView')?.classList.toggle('hidden', !attachment);
+  els.split.classList.toggle('hidden', Boolean(attachment));
+  els.toolbar.classList.toggle('hidden', Boolean(attachment) || !prompt);
+  if (attachment) {
+    els.emptyState.classList.add('hidden');
+    renderAttachmentView(attachment);
+    $('#statusPrompt').textContent = attachment.name;
+    $('#statusWords').textContent = formatBytes(attachment.size);
+    $('#statusChars').textContent = attachment.type || 'arquivo';
+    $('#editorMeta').textContent = `${project.name} · ${attachment.name}`;
+    return;
+  }
+
   const hasPrompt = Boolean(prompt);
   els.split.classList.toggle('is-empty', !hasPrompt);
   els.split.classList.toggle('is-hidden', hasPrompt && !previewVisible);
@@ -1471,20 +1657,51 @@ function attachmentPreviewKind(attachment) {
   return 'unsupported';
 }
 
+// O anexo abre em uma aba (não em modal): a área do editor dá lugar à pré-visualização.
 async function openAttachmentPreview(attachment) {
-  const body = $('#attachmentPreviewBody');
-  const downloadBtn = $('#attachmentPreviewDownload');
-  $('#attachmentPreviewName').textContent = attachment.name;
-  if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = null; }
+  state.attachmentView = attachment.id;
   previewAttachment = attachment;
+  renderTabs();
+  renderEditor();
+}
+
+function closeAttachmentPreview() {
+  state.attachmentView = null;
+  previewAttachment = null;
+  if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = null; }
+  renderTabs();
+  renderEditor();
+}
+
+// desenha a pré-visualização do anexo na aba ativa
+async function renderAttachmentView(attachment) {
+  const body = $('#attachmentViewBody');
+  const view = $('#attachmentView');
+  if (!body || !view) return;
+  const downloadBtn = $('#attachmentViewDownload');
+  const nameEl = $('#attachmentViewName');
+  const metaEl = $('#attachmentViewMeta');
+  const iconEl = $('#attachmentViewIcon');
+
+  nameEl.textContent = attachment.name;
+  metaEl.textContent = `${formatBytes(attachment.size)} · ${attachment.type}`;
+  if (iconEl) {
+    iconEl.dataset.icon = fileIcon(attachment.name, attachment.type);
+    applyIcons(view);
+  }
+
+  if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = null; }
   body.innerHTML = '<div class="attachment-preview__empty">Carregando...</div>';
-  openById('attachmentPreviewDialog');
+
   const blob = await getBlob(attachment.id);
   if (!blob) {
     body.innerHTML = '<div class="attachment-preview__empty">Conteúdo indisponível — o arquivo pode ter sido adicionado em outro navegador.</div>';
+    downloadBtn?.classList.add('hidden');
     return;
   }
+
   previewObjectUrl = URL.createObjectURL(blob);
+  downloadBtn?.classList.remove('hidden');
   const kind = attachmentPreviewKind(attachment);
   if (kind === 'image') body.innerHTML = `<img src="${previewObjectUrl}" alt="${escapeHtml(attachment.name)}">`;
   else if (kind === 'video') body.innerHTML = `<video src="${previewObjectUrl}" controls playsinline></video>`;
@@ -1498,12 +1715,6 @@ async function openAttachmentPreview(attachment) {
   } else {
     body.innerHTML = '<div class="attachment-preview__empty">Sem pré-visualização para este tipo de arquivo. Use “Baixar” para abrir.</div>';
   }
-}
-
-function closeAttachmentPreview() {
-  $('#attachmentPreviewDialog')?.hide?.();
-  if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = null; }
-  previewAttachment = null;
 }
 
 function formatBytes(size = 0) {
@@ -1679,12 +1890,7 @@ function bindEvents() {
     openById('attachDialog');
   });
 
-  $('#attachmentPreviewClose')?.addEventListener('click', closeAttachmentPreview);
-  $('#attachmentPreviewDialog')?.addEventListener('close', () => {
-    if (previewObjectUrl) { URL.revokeObjectURL(previewObjectUrl); previewObjectUrl = null; }
-    previewAttachment = null;
-  });
-  $('#attachmentPreviewDownload')?.addEventListener('click', () => {
+  $('#attachmentViewDownload')?.addEventListener('click', () => {
     if (!previewObjectUrl || !previewAttachment) return;
     const link = document.createElement('a');
     link.href = previewObjectUrl;
@@ -1845,17 +2051,27 @@ function bindEvents() {
     scheduleAiSuggestion();
   });
 
-  // caixinha de ações da IA sobre o texto selecionado
-  let selChangeTimer = null;
+  // Caixinha de ações da IA: aparece só quando o usuário SOLTA o mouse
+  // (ou termina de selecionar pelo teclado), nunca durante o arrasto.
+  let selectingText = false;
+  els.editor.addEventListener('pointerdown', () => { selectingText = true; hideSelectionTools(); });
+  document.addEventListener('pointerup', () => {
+    if (!selectingText) return;
+    selectingText = false;
+    setTimeout(maybeShowSelectionTools, 0);
+  });
   els.editor.addEventListener('mouseup', () => setTimeout(maybeShowSelectionTools, 0));
-  els.editor.addEventListener('keyup', () => setTimeout(maybeShowSelectionTools, 0));
+  els.editor.addEventListener('keyup', (e) => {
+    if (e.shiftKey || e.key.startsWith('Arrow') || e.key === 'End' || e.key === 'Home') {
+      setTimeout(maybeShowSelectionTools, 0);
+    }
+  });
+  // selectionchange só serve para esconder a caixa quando a seleção sai do editor
   document.addEventListener('selectionchange', () => {
-    clearTimeout(selChangeTimer);
-    selChangeTimer = setTimeout(() => {
-      const selection = window.getSelection();
-      if (selection?.anchorNode && els.editor.contains(selection.anchorNode)) maybeShowSelectionTools();
-      else hideSelectionTools();
-    }, 120);
+    if (selectingText) return;
+    const selection = window.getSelection();
+    const inside = selection?.anchorNode && els.editor.contains(selection.anchorNode);
+    if (!inside || selection.isCollapsed) hideSelectionTools();
   });
   document.querySelectorAll('#selectionTools button').forEach((button) => {
     button.addEventListener('mousedown', (e) => e.preventDefault());
@@ -1869,6 +2085,15 @@ function bindEvents() {
 
   els.editor.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
+    // Enter: inserimos a quebra nós mesmos. O contenteditable do Chrome
+    // coloca o cursor antes da quebra que ele mesmo criou, o que fazia o texto
+    // seguinte entrar na linha errada ("parecia" que o Enter não funcionava).
+    if (e.key === 'Enter' && !mod) {
+      e.preventDefault();
+      hideAiSuggestion();
+      insertText(els.editor, '\n');
+      return;
+    }
     if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoEdit(); return; }
     if (mod && ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')) { e.preventDefault(); redoEdit(); return; }
     if (e.key === 'Escape' && selResultText) { e.preventDefault(); hideSelectionResult(); return; }

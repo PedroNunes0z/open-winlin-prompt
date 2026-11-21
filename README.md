@@ -56,10 +56,10 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 
 - **Editor Markdown rico** — negrito, itálico, títulos, código, listas, citações, tabelas e matemática (`$...$`, `$$...$$`) com destaque visual **dentro do editor**, sem perder o texto cru;
 - **Pré-visualização instantânea** (GFM + realce de sintaxe + KaTeX), com botão de copiar código;
-- **Sugestões inline de IA local** — texto fantasma com opacidade reduzida no cursor (`Tab` aceita, `Esc` ignora), com streaming, tamanho automático e tempo/falha na barra inferior;
-- **Ações sobre a seleção** — ao selecionar um texto: **Reduzir**, **Aumentar** e **Corrigir gramática** com o modelo local;
+- **Sugestões inline de IA local** — texto fantasma com opacidade reduzida no cursor (`Tab` aceita, `Esc` ignora), com streaming, aquecimento do modelo, cache do contexto, tamanho automático e tempo/falha na barra inferior;
+- **Ações sobre a seleção** — selecione um texto e **solte o mouse**: aparecem **Reduzir**, **Aumentar** e **Corrigir gramática** (a caixa só aparece ao soltar, nunca durante o arrasto);
 - **Biblioteca do projeto** — cadastre **APIs** (provedor, URLs, chave e modelos), **IDEs** e **WebSites** e insira no prompt sem a chave;
-- **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB);
+- **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB), abertos em **aba própria** (sem janela/modal);
 - **Menções `@`** para referenciar prompts e anexos do projeto;
 - **Desfazer/refazer** (`Ctrl+Z` / `Ctrl+Shift+Z`) e temas claro/escuro com cores de destaque.
 - **Tema padrão ciano → azul** (`#00d2ff` → `#3a7bd5`) nos botões de destaque, selos, abas e detalhes, com superfícies branco-fantasma (`#f8f8ff`) no tema claro.
