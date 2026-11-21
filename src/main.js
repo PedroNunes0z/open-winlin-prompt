@@ -2838,12 +2838,11 @@ async function checkForUpdates({ manual = false } = {}) {
       $('#updateBadge')?.classList.add('hidden');
     }
   } catch (err) {
-    if (manual) {
-      status.className = 'update-status is-error';
-      status.textContent = navigator.onLine === false
-        ? 'Sem conexão com a internet agora.'
-        : `Não foi possível verificar agora (${err.message}).`;
-    }
+    // também na verificação automática: nada de deixar "Procurando..." eterno
+    status.className = manual ? 'update-status is-error' : 'update-status';
+    status.textContent = navigator.onLine === false
+      ? 'Sem conexão agora — clique em Verificar depois.'
+      : `Não foi possível verificar agora (${err.message}).`;
   } finally {
     if (manual) button.disabled = false;
   }
