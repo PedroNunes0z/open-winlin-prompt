@@ -1,6 +1,13 @@
 ﻿# Open Winlin Prompt — Instalador (interface gráfica WPF)
 # Uso: duplo clique em "Instalar.cmd" ou:
 #   powershell -NoProfile -ExecutionPolicy Bypass -STA -File Instalar.ps1
+# Com o pacote embutido no .exe:
+#   powershell -STA -File Instalar.ps1 -PacoteLocal <caminho\open-winlin-prompt.zip>
+
+param(
+    # zip já baixado (usado pelo instalador .exe, que traz o pacote embutido)
+    [string]$PacoteLocal = ''
+)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
@@ -110,7 +117,7 @@ $sync = [hashtable]::Synchronized(@{
 
 # ---------------------------------------------------------------- worker (Runspace próprio)
 $workerScript = {
-    param($Sync, $RepoUrl, $ZipUrl, $TargetDir, $Model, $InstallOllama, $DownloadModel, $MakeShortcut)
+    param($Sync, $RepoUrl, $ZipUrl, $PacoteLocal, $TargetDir, $Model, $InstallOllama, $DownloadModel, $MakeShortcut)
 
     $ErrorActionPreference = 'Stop'
     $ProgressPreference    = 'SilentlyContinue'
@@ -290,12 +297,17 @@ $workerScript = {
         $parentDir = Split-Path $TargetDir -Parent
         if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
 
-        # 1a) pacote pronto da Release (não precisa de Node.js/Git)
+        # 1a) pacote pronto: local (embutido no .exe) ou baixado da Release
         $usedPackage = $false
         $zipPath = Join-Path $env:TEMP 'open-winlin-prompt.zip'
         try {
-            Add-Log "Baixando: $ZipUrl"
-            Invoke-WebRequest -Uri $ZipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 180
+            if ($PacoteLocal -and (Test-Path -LiteralPath $PacoteLocal -PathType Leaf)) {
+                Add-Log 'Usando o pacote embutido no instalador...'
+                Copy-Item -LiteralPath $PacoteLocal -Destination $zipPath -Force
+            } else {
+                Add-Log "Baixando: $ZipUrl"
+                Invoke-WebRequest -Uri $ZipUrl -OutFile $zipPath -UseBasicParsing -TimeoutSec 180
+            }
             if ((Test-Path $zipPath) -and (Get-Item $zipPath).Length -gt 50KB) {
                 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
                 Expand-Archive -Path $zipPath -DestinationPath $TargetDir -Force
@@ -845,6 +857,7 @@ $installBtn.Add_Click({
         AddArgument($sync).
         AddArgument($RepoUrl).
         AddArgument($ZipUrl).
+        AddArgument($PacoteLocal).
         AddArgument($TargetDir).
         AddArgument($Model).
         AddArgument([bool]$chkOllama.IsChecked).

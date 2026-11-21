@@ -14,6 +14,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Artefatos de build locais
+*.exe
+open-winlin-prompt.zip
+
 # Artefatos de teste (gerados localmente)
 test-*.mjs
 /*.png

@@ -23,13 +23,17 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt-setup.exe">
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar%20instalador-open--winlin--prompt--setup.exe-00d2ff?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt-setup.exe">
+  </a>
   <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">
-    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar%20para%20Windows-open--winlin--prompt.zip-00d2ff?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar%20pacote%20.zip-3a7bd5?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">Download direto do pacote pronto</a> (≈ 1,5 MB, sem precisar de Node.js ou Git)
+  <b>Instalador .exe</b> (≈ 1,5 MB, com o app embutido, sem Node.js/Git) ·
+  <b>Pacote .zip</b> (portátil, extrair e rodar)
 </p>
 
 ---
@@ -62,7 +66,15 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 
 ## Instalação
 
-### Automática (recomendada)
+### Instalador `.exe` (recomendado)
+
+1. Baixe o **[`open-winlin-prompt-setup.exe`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt-setup.exe)**;
+2. Duplo clique e escolha as opções na janela (Ollama, modelo de IA, atalho);
+3. Clique em **Instalar** — ele extrai o pacote embutido em `%LOCALAPPDATA%\Programs\open-winlin-prompt`, configura o Ollama e cria o atalho.
+
+> Não pede administrador. O `.exe` só contém o app (não é código assinado); se o SmartScreen avisar, use **Mais informações → Executar assim mesmo**.
+
+### Pelo repositório (`Instalar.cmd`)
 
 1. Baixe o repositório (botão **Code → Download ZIP**) ou clone;
 2. Duplo clique em **`Instalar.cmd`** — ele:
@@ -75,17 +87,18 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 
 > Nada de administrador: tudo fica no seu perfil de usuário.
 
-### Só o pacote pronto
+### Só o pacote pronto (portátil)
 
 <p>
   <a href="https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip">
-    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar-open--winlin--prompt.zip-00d2ff?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
+    <img src="https://img.shields.io/badge/%E2%AC%87%20Baixar-open--winlin--prompt.zip-3a7bd5?style=for-the-badge&logo=windows&logoColor=white" alt="Baixar open-winlin-prompt.zip">
   </a>
 </p>
 
 Se preferir não usar o instalador, baixe direto o
 [`open-winlin-prompt.zip`](https://github.com/PedroNunes0z/open-winlin-prompt/releases/latest/download/open-winlin-prompt.zip),
 extraia onde quiser e execute **`Abrir Open Winlin Prompt.cmd`**.
+(Se o app não reconhecer o Ollama, rode o `Configurar Ollama.cmd`.)
 
 ### Manual (desenvolvimento)
 
@@ -135,7 +148,8 @@ As sugestões usam o [Ollama](https://ollama.com/download) com o modelo **Qwen2.
 ```
 open-winlin-prompt/
 ├── LICENSE                          # MIT
-├── .github/workflows/release.yml    # compila e publica o .zip
+├── .github/workflows/release.yml    # compila e publica .zip + .exe
+├── installer/                       # bootstrapper C# e build do .exe
 ├── Instalar.cmd / Instalar.ps1      # instalador (janela WPF)
 ├── Configurar Ollama.cmd            # liberação do Ollama p/ o app
 ├── Abrir Open Winlin Prompt.cmd     # atalho do programa

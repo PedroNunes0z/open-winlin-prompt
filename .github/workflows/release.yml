@@ -43,15 +43,25 @@ jobs:
           Compress-Archive -Path package/* -DestinationPath open-winlin-prompt.zip -Force
           Write-Host ("Pacote: " + (Get-Item open-winlin-prompt.zip).Length + " bytes")
 
-      - name: Guardar artefato
+      - name: Compilar o instalador .exe (pacote embutido)
+        shell: pwsh
+        run: |
+          ./installer/build-exe.ps1 -Pacote open-winlin-prompt.zip -Saida open-winlin-prompt-setup.exe
+          Get-Item open-winlin-prompt-setup.exe | Format-List Name, Length
+
+      - name: Guardar artefatos
         uses: actions/upload-artifact@v4
         with:
           name: open-winlin-prompt
-          path: open-winlin-prompt.zip
+          path: |
+            open-winlin-prompt.zip
+            open-winlin-prompt-setup.exe
 
-      - name: Anexar .zip na Release
+      - name: Anexar .zip e .exe na Release
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          files: open-winlin-prompt.zip
+          files: |
+            open-winlin-prompt.zip
+            open-winlin-prompt-setup.exe
           generate_release_notes: true
