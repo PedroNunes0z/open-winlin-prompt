@@ -38,6 +38,13 @@ export const icons = {
   globe: svg('<circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2 2 3 4.6 3 7.5s-1 5.5-3 7.5c-2-2-3-4.6-3-7.5S8 4.5 10 2.5z"/>'),
   key: svg('<circle cx="7" cy="12.5" r="4"/><path d="M10 9.5L17.5 2M14.5 4.5l2.5 2.5M12 7l2 2"/>'),
   external: svg('<path d="M12.5 3.5h4v4"/><path d="M16.5 3.5L9 11"/><path d="M7 5.5H5A1.5 1.5 0 003.5 7v8A1.5 1.5 0 005 16.5h8A1.5 1.5 0 0014.5 15v-2"/>'),
+  // --- quadro de tarefas e notas ---
+  board: svg('<rect x="2.5" y="3.5" width="4.6" height="13" rx="1.2"/><rect x="8.4" y="3.5" width="4.6" height="9" rx="1.2"/><rect x="14.3" y="3.5" width="3.2" height="11" rx="1.2"/>'),
+  note: svg('<path d="M4 3.5h9.5L17 7v9.5H4z"/><path d="M13.5 3.5V7H17"/><path d="M6.5 10h6M6.5 13h4"/>'),
+  bell: svg('<path d="M5.5 8.5a4.5 4.5 0 019 0c0 3.4 1.3 4.6 1.3 5.5H4.2c0-.9 1.3-2.1 1.3-5.5z"/><path d="M8.2 16.2a1.9 1.9 0 003.6 0"/>'),
+  calendar: svg('<rect x="3" y="4.5" width="14" height="12" rx="1.6"/><path d="M3 8h14M7 3v3M13 3v3"/>'),
+  drag: svg('<circle cx="8" cy="6" r="1"/><circle cx="12" cy="6" r="1"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="10" r="1"/><circle cx="8" cy="14" r="1"/><circle cx="12" cy="14" r="1"/>'),
+  'arrow-down': svg('<path d="M10 3v12M5.5 10.5L10 15l4.5-4.5"/>'),
   // --- ícones por tipo de arquivo anexado ---
   'file-image': svg('<rect x="2.5" y="3.5" width="15" height="13" rx="1.8"/><circle cx="7" cy="8" r="1.8"/><path d="M3 16.5l4.5-4.5 2.5 2.5 3-3 4 4"/>'),
   'file-video': svg('<rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="M8.5 8l4.5 2.5L8.5 13V8z"/>'),

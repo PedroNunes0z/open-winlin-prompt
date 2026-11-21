@@ -8,6 +8,12 @@ export const uid = (prefix = 'id') =>
 
 const now = () => new Date().toISOString();
 
+export const BOARD_COLUMNS = () => [
+  { id: 'col_todo', name: 'A fazer' },
+  { id: 'col_doing', name: 'Em andamento' },
+  { id: 'col_done', name: 'Concluído' },
+];
+
 function seedWorkspace() {
   const projectId = uid('proj');
   const attachmentId = uid('att');
@@ -84,6 +90,47 @@ function seedWorkspace() {
             createdAt: now(),
           },
         ],
+        board: { columns: BOARD_COLUMNS() },
+        tasks: [
+          {
+            id: uid('task'),
+            title: 'Revisar o prompt do cliente',
+            detail: 'Conferir tom de voz e remover repetições.',
+            color: 'yellow',
+            columnId: 'col_todo',
+            done: false,
+            createdAt: now(),
+          },
+          {
+            id: uid('task'),
+            title: 'Testar sugestões da IA local',
+            detail: 'Escrever um parágrafo e aceitar com Tab.',
+            color: 'sky',
+            columnId: 'col_doing',
+            done: false,
+            createdAt: now(),
+          },
+          {
+            id: uid('task'),
+            title: 'Criar o primeiro projeto',
+            detail: '',
+            color: 'mint',
+            columnId: 'col_done',
+            done: true,
+            createdAt: now(),
+          },
+        ],
+        notes: [
+          {
+            id: uid('note'),
+            text: 'Ideias para a próxima semana\n\n- Organizar os prompts por cliente\n- Testar o modelo com textos longos\n- Exportar o workspace como backup',
+            paper: 'cream',
+            remindAt: '',
+            createdAt: now(),
+            updatedAt: now(),
+          },
+        ],
+        activeNoteId: null,
       },
     ],
   };
@@ -108,6 +155,30 @@ function normalize(raw) {
     p.websites ||= [];
     p.createdAt ||= now();
     p.name ||= 'Projeto sem nome';
+
+    // quadro de tarefas e notas (adicionados depois, então precisam de padrão)
+    p.board ||= {};
+    if (!Array.isArray(p.board.columns) || p.board.columns.length === 0) p.board.columns = BOARD_COLUMNS();
+    p.tasks ||= [];
+    p.notes ||= [];
+    p.activeNoteId ||= null;
+    for (const task of p.tasks) {
+      task.id ||= uid('task');
+      task.title ||= 'Tarefa';
+      task.detail ||= '';
+      task.color ||= 'yellow';
+      task.done = Boolean(task.done);
+      if (!p.board.columns.some((c) => c.id === task.columnId)) {
+        task.columnId = task.done ? p.board.columns[p.board.columns.length - 1].id : p.board.columns[0].id;
+      }
+    }
+    for (const note of p.notes) {
+      note.id ||= uid('note');
+      note.text ||= '';
+      note.paper ||= 'cream';
+      note.remindAt ||= '';
+      note.updatedAt ||= note.createdAt || now();
+    }
   }
   if (!raw.projects.some((p) => p.id === raw.activeProjectId)) {
     raw.activeProjectId = raw.projects[0].id;

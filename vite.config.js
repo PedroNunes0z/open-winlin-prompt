@@ -1,9 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 export default defineConfig({
   base: './',
   plugins: [viteSingleFile()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     target: 'es2022',
     cssCodeSplit: false,

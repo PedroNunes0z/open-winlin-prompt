@@ -58,6 +58,9 @@ Este projeto é **open source**, distribuído sob a [licença MIT](LICENSE) — 
 - **Pré-visualização instantânea** (GFM + realce de sintaxe + KaTeX), com botão de copiar código;
 - **Sugestões inline de IA local** — texto fantasma com opacidade reduzida no cursor (`Tab` aceita, `Esc` ignora), com streaming, aquecimento do modelo, cache do contexto, tamanho automático e tempo/falha na barra inferior;
 - **Ações sobre a seleção** — selecione um texto e **solte o mouse**: aparecem **Reduzir**, **Aumentar** e **Corrigir gramática** (a caixa só aparece ao soltar, nunca durante o arrasto);
+- **Quadro de tarefas** — post-its coloridos (6 cores), arrastáveis entre as colunas **A fazer / Em andamento / Concluído**, com ponta dobrada e fita adesiva; clique para editar, arraste para reordenar e alterne para a **lista de tarefas**;
+- **Notas e lembretes** — folhas de papel pautado (linhas e margem), título, corpo e lembrete com data/hora, em 6 cores de papel; a lista mostra o prazo e destaca o que venceu;
+- **Verificação de atualizações** — em **Configurações → Atualizações** o app compara sua versão com a última Release do GitHub e oferece o botão **Baixar atualização** (um ponto colorido na engrenagem avisa quando há versão nova);
 - **Biblioteca do projeto** — cadastre **APIs** (provedor, URLs, chave e modelos), **IDEs** e **WebSites** e insira no prompt sem a chave;
 - **Anexos com pré-visualização** — texto, imagem, PDF, áudio e vídeo (até 50 MB, guardados no IndexedDB), abertos em **aba própria** (sem janela/modal);
 - **Menções `@`** para referenciar prompts e anexos do projeto;
@@ -143,6 +146,8 @@ git push origin v1.0.1
 | `@` | Referenciar prompt ou anexo |
 
 - Selecione um texto no editor para **Reduzir**, **Aumentar** ou **Corrigir gramática** com a IA local.
+- Na lateral, **Organização → Quadro de tarefas** abre os post-its (arraste para mover entre colunas, clique para editar) e **Notas e lembretes** abre o bloco de papel pautado; ambos ficam salvos no projeto e acompanham o backup `.json`.
+- Para saber se existe versão nova: **Configurações (engrenagem) → Atualizações → Verificar**.
 
 ## IA local (Ollama)
 

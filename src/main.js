@@ -1103,8 +1103,11 @@ function setActiveProject(id) {
 }
 
 function openPrompt(id) {
-  const hadAttachment = Boolean(state.attachmentView);
+  // voltar de uma aba especial (anexo/quadro/notas) para o prompt já ativo
+  // também precisa redesenhar
+  const hadAttachment = Boolean(state.attachmentView) || Boolean(state.specialView);
   state.attachmentView = null;
+  state.specialView = null;
   // voltar da aba de anexo para a aba já ativa precisa redesenhar
   if (!hadAttachment && state.activePromptId === id && state.openTabs.includes(id)) return;
   state.activePromptId = id;
@@ -1175,7 +1178,6 @@ function renderTree() {
     <div class="project-info__row">
       <div class="project-info__text">
         <div class="project-info__name">${escapeHtml(project.name)}</div>
-        <div class="project-info__meta">${project.prompts.length} prompt${project.prompts.length === 1 ? '' : 's'} · ${project.attachments.length} anexo${project.attachments.length === 1 ? '' : 's'} · ${libraryItems(project, 'api').length + libraryItems(project, 'ide').length + libraryItems(project, 'website').length} na biblioteca</div>
       </div>
       <div class="project-info__actions">
         <button class="tree-item__action" data-project-action="rename" title="Renomear projeto" data-icon="rename"></button>
@@ -1198,6 +1200,21 @@ function renderTree() {
       <div class="tree-group__head"><span class="tree-group__chevron" data-icon="chevron"></span><span data-icon="attach"></span><span class="tree-group__title">Anexos</span><fluent-badge>${project.attachments.length}</fluent-badge><button class="tree-group__add" id="treeAddAttachmentBtn" title="Adicionar anexos" data-icon="add"></button></div>
       <div class="tree-group__body">
         ${attachments.length ? attachments.map((a) => fileItemHtml(a, 'attachment')).join('') : '<div class="tree-empty">Nenhum anexo</div>'}
+      </div>
+    </div>
+    <div class="tree-group">
+      <div class="tree-group__head"><span class="tree-group__chevron" data-icon="chevron"></span><span data-icon="board"></span><span class="tree-group__title">Organização</span><fluent-badge>${project.tasks.length + project.notes.length}</fluent-badge></div>
+      <div class="tree-group__body">
+        <div class="tree-item ${state.specialView === 'board' ? 'is-active' : ''}" data-special="board" role="treeitem" tabindex="0" title="Quadro de tarefas">
+          <span class="tree-item__icon" data-icon="board"></span>
+          <span class="tree-item__name">Quadro de tarefas</span>
+          <span class="tree-item__meta">${project.tasks.filter((t) => !t.done).length}</span>
+        </div>
+        <div class="tree-item ${state.specialView === 'notes' ? 'is-active' : ''}" data-special="notes" role="treeitem" tabindex="0" title="Notas e lembretes">
+          <span class="tree-item__icon" data-icon="note"></span>
+          <span class="tree-item__name">Notas e lembretes</span>
+          <span class="tree-item__meta">${project.notes.length}</span>
+        </div>
       </div>
     </div>
     ${Object.entries(LIBRARY).map(([type, cfg]) => {
@@ -1246,14 +1263,17 @@ function renderTree() {
         else handleTreeAction(item.dataset.kind, item.dataset.id, actionButton.dataset.action);
         return;
       }
-      if (item.dataset.libraryKind) handleLibraryItemAction(item.dataset.libraryKind, item.dataset.id, 'open');
+      if (item.dataset.special) openSpecialView(item.dataset.special);
+      else if (item.dataset.libraryKind) handleLibraryItemAction(item.dataset.libraryKind, item.dataset.id, 'open');
       else if (item.dataset.kind === 'prompt') openPrompt(item.dataset.id);
       else if (item.dataset.kind === 'attachment') {
         const attachment = getActiveProject().attachments.find((a) => a.id === item.dataset.id);
         if (attachment) openAttachmentPreview(attachment);
       }
     });
-    item.addEventListener('dblclick', () => handleTreeAction(item.dataset.kind, item.dataset.id, 'rename'));
+    item.addEventListener('dblclick', () => {
+      if (item.dataset.kind) handleTreeAction(item.dataset.kind, item.dataset.id, 'rename');
+    });
     item.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
@@ -1270,12 +1290,14 @@ function renderTabs() {
   const project = getActiveProject();
   const attachment = state.attachmentView ? project.attachments.find((a) => a.id === state.attachmentView) : null;
   if (state.attachmentView && !attachment) state.attachmentView = null;
+  const special = state.specialView || null;
+  if (special && !['board', 'notes'].includes(special)) state.specialView = null;
 
-  els.tabs.classList.toggle('hidden', state.openTabs.length === 0 && !attachment);
+  els.tabs.classList.toggle('hidden', state.openTabs.length === 0 && !attachment && !special);
   const promptTabs = state.openTabs.map((id) => {
     const found = findPromptById(id);
     if (!found) return '';
-    const active = !attachment && id === state.activePromptId ? 'is-active' : '';
+    const active = !attachment && !special && id === state.activePromptId ? 'is-active' : '';
     return `
       <div class="tab ${active}" data-id="${escapeHtml(id)}" role="tab" aria-selected="${active === 'is-active'}" title="${escapeHtml(found.prompt.name)}">
         <span class="tab__icon" data-icon="file-text"></span>
@@ -1291,11 +1313,22 @@ function renderTabs() {
         <button class="tab__close" data-close-attachment="1" title="Fechar" data-icon="close"></button>
       </div>` : '';
 
-  els.tabs.innerHTML = promptTabs + attachmentTab;
+  const specialTab = special ? `
+      <div class="tab tab--attachment is-active" data-special-tab="${special}" role="tab" aria-selected="true" title="${special === 'board' ? 'Quadro de tarefas' : 'Notas e lembretes'}">
+        <span class="tab__icon" data-icon="${special === 'board' ? 'board' : 'note'}"></span>
+        <span class="tab__name">${special === 'board' ? 'Quadro de tarefas' : 'Notas e lembretes'}</span>
+        <button class="tab__close" data-close-special="1" title="Fechar" data-icon="close"></button>
+      </div>` : '';
+
+  els.tabs.innerHTML = promptTabs + specialTab + attachmentTab;
   applyIcons(els.tabs);
 
   els.tabs.querySelectorAll('.tab').forEach((tab) => {
     tab.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close-special]')) {
+        closeSpecialView();
+        return;
+      }
       if (e.target.closest('[data-close-attachment]')) {
         closeAttachmentPreview();
         return;
@@ -1304,7 +1337,7 @@ function renderTabs() {
         closeTab(tab.dataset.id);
         return;
       }
-      if (tab.dataset.attachment) return; // já é a aba ativa
+      if (tab.dataset.attachment || tab.dataset.specialTab) return; // já é a aba ativa
       if (findPromptById(tab.dataset.id)?.project.id !== getActiveProject().id) {
         setActiveProject(findPromptById(tab.dataset.id).project.id);
       }
@@ -1331,11 +1364,25 @@ function renderEditor() {
   hideAiSuggestion();
   const { project, prompt } = currentPrompt();
 
-  // aba de anexo: a área do editor dá lugar à pré-visualização do arquivo
+  // abas especiais (quadro de tarefas, notas) e de anexo ocupam a área do editor
+  const special = ['board', 'notes'].includes(state.specialView) ? state.specialView : null;
+  if (state.specialView && !special) state.specialView = null;
   const attachment = state.attachmentView ? project.attachments.find((a) => a.id === state.attachmentView) : null;
+  $('#boardView')?.classList.toggle('hidden', special !== 'board');
+  $('#notesView')?.classList.toggle('hidden', special !== 'notes');
+  if (special === 'board') renderBoard();
+  if (special === 'notes') renderNotes();
   $('#attachmentView')?.classList.toggle('hidden', !attachment);
-  els.split.classList.toggle('hidden', Boolean(attachment));
-  els.toolbar.classList.toggle('hidden', Boolean(attachment) || !prompt);
+  els.split.classList.toggle('hidden', Boolean(attachment) || Boolean(special));
+  els.toolbar.classList.toggle('hidden', Boolean(attachment) || Boolean(special) || !prompt);
+  if (special) {
+    els.emptyState.classList.add('hidden');
+    const labels = { board: 'Quadro de tarefas', notes: 'Notas e lembretes' };
+    $('#statusPrompt').textContent = labels[special];
+    $('#editorMeta').textContent = `${project.name} · ${labels[special]}`;
+    updateSpecialStatus(special);
+    return;
+  }
   if (attachment) {
     els.emptyState.classList.add('hidden');
     renderAttachmentView(attachment);
@@ -2215,14 +2262,655 @@ function bindEvents() {
   });
 }
 
+/* -------------------- quadro de tarefas e notas (abas especiais) -------------------- */
+// Ocupam a área do editor, como a aba de anexo. O conteúdo fica no projeto ativo
+// (project.tasks / project.notes), então acompanha o workspace e o backup .json.
+
+const STICKY_COLORS = ['yellow', 'pink', 'mint', 'sky', 'lilac', 'peach'];
+const PAPER_COLORS = ['cream', 'white', 'yellow', 'mint', 'sky', 'rose'];
+let boardMode = 'board'; // 'board' | 'list' (preferência da sessão)
+let dragTaskId = null;
+let taskEditingId = null;
+let taskDraftColor = 'yellow';
+let noteListTimer = null;
+
+// Contadores da barra inferior para as abas especiais (também usados quando o
+// quadro/notas mudam sem passar por renderEditor).
+function updateSpecialStatus(kind = state.specialView) {
+  const project = getActiveProject();
+  if (kind === 'board') {
+    const open = project.tasks.filter((t) => !t.done).length;
+    $('#statusWords').textContent = `${open} em aberto`;
+    $('#statusChars').textContent = `${project.tasks.length} tarefa${project.tasks.length === 1 ? '' : 's'}`;
+  } else if (kind === 'notes') {
+    const reminders = project.notes.filter((n) => n.remindAt).length;
+    $('#statusWords').textContent = `${project.notes.length} nota${project.notes.length === 1 ? '' : 's'}`;
+    $('#statusChars').textContent = `${reminders} lembrete${reminders === 1 ? '' : 's'}`;
+  }
+}
+
+function openSpecialView(kind) {
+  if (!['board', 'notes'].includes(kind)) return;
+  state.attachmentView = null;
+  state.specialView = kind;
+  persist();
+  renderAll();
+}
+
+function closeSpecialView() {
+  state.specialView = null;
+  persist();
+  renderAll();
+}
+
+const shortDate = (iso) => {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+};
+
+function doneColumnId() {
+  const columns = getActiveProject().board.columns;
+  return columns[columns.length - 1].id;
+}
+
+/* ------------------------------- tarefas ------------------------------- */
+
+function renderBoard() {
+  const canvas = $('#boardCanvas');
+  if (!canvas) return;
+  const project = getActiveProject();
+  const { columns } = project.board;
+  const tasks = project.tasks;
+
+  const open = tasks.filter((t) => !t.done).length;
+  $('#boardSummary').textContent = tasks.length
+    ? `${tasks.length} tarefa${tasks.length === 1 ? '' : 's'} · ${open} em aberto`
+    : 'Quadro vazio — crie a primeira tarefa';
+  document.querySelectorAll('#boardModeSwitch button').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.boardMode === boardMode);
+  });
+
+  if (boardMode === 'list') {
+    canvas.innerHTML = renderTaskList(project);
+    bindTaskListEvents(project);
+    return;
+  }
+
+  canvas.innerHTML = columns.map((column) => {
+    const list = tasks.filter((t) => t.columnId === column.id);
+    return `
+      <section class="board-column" data-column-id="${escapeHtml(column.id)}">
+        <header class="board-column__head">
+          <span class="board-column__dot"></span>
+          <span class="board-column__name">${escapeHtml(column.name)}</span>
+          <span class="board-column__count">${list.length}</span>
+          <button type="button" class="board-column__add" data-add-task="${escapeHtml(column.id)}" title="Nova tarefa nesta coluna" data-icon="add"></button>
+        </header>
+        <div class="board-column__body" data-drop-column="${escapeHtml(column.id)}">
+          ${list.length
+            ? list.map((task) => taskCardHtml(task)).join('')
+            : '<div class="board-column__empty">Arraste um post-it para cá</div>'}
+        </div>
+      </section>`;
+  }).join('');
+  applyIcons(canvas);
+  bindBoardEvents(canvas);
+}
+
+function taskCardHtml(task) {
+  return `
+    <article class="task-card is-color-${escapeHtml(task.color)}${task.done ? ' is-done' : ''}" draggable="true" data-task-id="${escapeHtml(task.id)}" title="Clique para editar · arraste para mover">
+      <div class="task-card__title">${escapeHtml(task.title)}</div>
+      ${task.detail ? `<div class="task-card__detail">${escapeHtml(task.detail)}</div>` : ''}
+      <div class="task-card__foot">
+        <span class="task-card__date">${escapeHtml(shortDate(task.createdAt))}</span>
+        <button type="button" class="task-card__check" data-toggle-task="${escapeHtml(task.id)}" title="${task.done ? 'Reabrir tarefa' : 'Marcar como concluída'}" data-icon="check"></button>
+      </div>
+    </article>`;
+}
+
+function bindBoardEvents(canvas) {
+  canvas.querySelectorAll('[data-add-task]').forEach((button) => {
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openTaskDialog(null, button.dataset.addTask);
+    });
+  });
+
+  canvas.querySelectorAll('[data-toggle-task]').forEach((button) => {
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleTask(button.dataset.toggleTask);
+    });
+  });
+
+  canvas.querySelectorAll('.task-card').forEach((card) => {
+    card.addEventListener('click', () => openTaskDialog(card.dataset.taskId));
+    card.addEventListener('dragstart', (e) => {
+      dragTaskId = card.dataset.taskId;
+      card.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragTaskId); } catch { /* alguns navegadores bloqueiam */ }
+    });
+    card.addEventListener('dragend', () => {
+      card.classList.remove('is-dragging');
+      dragTaskId = null;
+      clearBoardDropMarks();
+    });
+    // soltar em cima de outro post-it insere antes dele (reordena)
+    card.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      card.classList.add('is-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('is-over'));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      card.classList.remove('is-over');
+      const id = e.dataTransfer.getData('text/plain') || dragTaskId;
+      const columnId = card.closest('[data-drop-column]')?.dataset.dropColumn;
+      moveTask(id, columnId, card.dataset.taskId);
+    });
+  });
+
+  canvas.querySelectorAll('[data-drop-column]').forEach((body) => {
+    body.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      body.closest('.board-column')?.classList.add('is-drop');
+    });
+    body.addEventListener('dragleave', (e) => {
+      if (!body.contains(e.relatedTarget)) body.closest('.board-column')?.classList.remove('is-drop');
+    });
+    body.addEventListener('drop', (e) => {
+      e.preventDefault();
+      clearBoardDropMarks();
+      const id = e.dataTransfer.getData('text/plain') || dragTaskId;
+      moveTask(id, body.dataset.dropColumn, null);
+    });
+  });
+}
+
+function clearBoardDropMarks() {
+  document.querySelectorAll('.board-column.is-drop').forEach((el) => el.classList.remove('is-drop'));
+  document.querySelectorAll('.task-card.is-over').forEach((el) => el.classList.remove('is-over'));
+}
+
+function moveTask(taskId, columnId, beforeTaskId = null) {
+  const project = getActiveProject();
+  const task = project.tasks.find((t) => t.id === taskId);
+  if (!task || !columnId || !project.board.columns.some((c) => c.id === columnId)) return;
+  if (task.id === beforeTaskId) return;
+
+  project.tasks.splice(project.tasks.indexOf(task), 1);
+  task.columnId = columnId;
+  task.done = columnId === doneColumnId();
+
+  if (beforeTaskId) {
+    const index = project.tasks.findIndex((t) => t.id === beforeTaskId);
+    project.tasks.splice(index === -1 ? project.tasks.length : index, 0, task);
+  } else {
+    // fim da coluna de destino
+    let last = -1;
+    project.tasks.forEach((t, i) => { if (t.columnId === columnId) last = i; });
+    project.tasks.splice(last === -1 ? project.tasks.length : last + 1, 0, task);
+  }
+
+  persist();
+  renderBoard();
+  renderTree();
+  updateSpecialStatus('board');
+}
+
+function toggleTask(taskId) {
+  const project = getActiveProject();
+  const task = project.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.done = !task.done;
+  task.columnId = task.done ? doneColumnId() : project.board.columns[0].id;
+  persist();
+  renderBoard();
+  renderTree();
+  updateSpecialStatus('board');
+  toast(task.done ? 'Tarefa concluída' : 'Tarefa reaberta');
+}
+
+function renderTaskList(project) {
+  const columns = project.board.columns;
+  return `<div class="task-list">${columns.map((column) => {
+    const list = project.tasks.filter((t) => t.columnId === column.id);
+    return `<section>
+      <div class="task-list__group-title"><span class="board-column__dot"></span>${escapeHtml(column.name)}<span class="board-column__count">${list.length}</span></div>
+      <div class="task-list__rows">
+        ${list.length ? list.map((task) => `
+          <div class="task-row${task.done ? ' is-done' : ''}" data-task-id="${escapeHtml(task.id)}">
+            <button type="button" class="task-row__check" data-toggle-task="${escapeHtml(task.id)}" title="${task.done ? 'Reabrir' : 'Concluir'}">${icons.check}</button>
+            <span class="task-row__dot is-color-${escapeHtml(task.color)}"></span>
+            <span class="task-row__text">
+              <div class="task-row__title">${escapeHtml(task.title)}</div>
+              ${task.detail ? `<div class="task-row__detail">${escapeHtml(task.detail)}</div>` : ''}
+            </span>
+            <span class="task-row__column">${escapeHtml(shortDate(task.createdAt))}</span>
+          </div>`).join('') : '<div class="tree-empty">Nenhuma tarefa nesta coluna</div>'}
+      </div>
+    </section>`;
+  }).join('')}</div>`;
+}
+
+function bindTaskListEvents(project) {
+  document.querySelectorAll('#boardCanvas [data-toggle-task]').forEach((button) => {
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleTask(button.dataset.toggleTask);
+    });
+  });
+  document.querySelectorAll('#boardCanvas .task-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const task = project.tasks.find((t) => t.id === row.dataset.taskId);
+      if (task) openTaskDialog(task.id);
+    });
+  });
+}
+
+function syncTaskColorPicker() {
+  document.querySelectorAll('#taskColorPicker .sticky-swatch').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.taskColor === taskDraftColor);
+    button.classList.add(`is-color-${button.dataset.taskColor}`);
+  });
+}
+
+function openTaskDialog(taskId = null, columnId = null) {
+  const project = getActiveProject();
+  const task = taskId ? project.tasks.find((t) => t.id === taskId) : null;
+  taskEditingId = task?.id || null;
+  taskDraftColor = task?.color || STICKY_COLORS[0];
+
+  $('#taskDialogTitle').textContent = task ? 'Editar tarefa' : 'Nova tarefa';
+  $('#taskTitleInput').value = task?.title || '';
+  $('#taskDetailInput').value = task?.detail || '';
+  const select = $('#taskColumnSelect');
+  select.innerHTML = project.board.columns
+    .map((column) => `<option value="${escapeHtml(column.id)}">${escapeHtml(column.name)}</option>`)
+    .join('');
+  select.value = task?.columnId || columnId || project.board.columns[0].id;
+  syncTaskColorPicker();
+  $('#taskDeleteBtn').classList.toggle('hidden', !task);
+  $('#taskDialog').show();
+  setTimeout(() => $('#taskTitleInput')?.focus(), 80);
+}
+
+function saveTaskDialog() {
+  const project = getActiveProject();
+  const title = ($('#taskTitleInput').value || '').trim();
+  if (!title) {
+    toast('Escreva o nome da tarefa', 'error');
+    return;
+  }
+  const detail = ($('#taskDetailInput').value || '').trim();
+  const columnId = $('#taskColumnSelect').value || project.board.columns[0].id;
+  const done = columnId === doneColumnId();
+
+  if (taskEditingId) {
+    const task = project.tasks.find((t) => t.id === taskEditingId);
+    if (task) Object.assign(task, { title, detail, color: taskDraftColor, columnId, done });
+  } else {
+    project.tasks.push({
+      id: uid('task'), title, detail, color: taskDraftColor, columnId, done, createdAt: now(),
+    });
+  }
+
+  $('#taskDialog').hide();
+  persist();
+  renderBoard();
+  renderTree();
+  updateSpecialStatus('board');
+  toast(taskEditingId ? 'Tarefa atualizada' : 'Tarefa criada');
+  taskEditingId = null;
+}
+
+function deleteTask(taskId) {
+  const project = getActiveProject();
+  project.tasks = project.tasks.filter((t) => t.id !== taskId);
+  persist();
+  renderBoard();
+  renderTree();
+  updateSpecialStatus('board');
+  toast('Tarefa excluída');
+}
+
+/* --------------------------------- notas --------------------------------- */
+
+function activeNote() {
+  const project = getActiveProject();
+  return project.notes.find((n) => n.id === project.activeNoteId) || null;
+}
+
+function noteTitle(note) {
+  const title = (note.title || '').trim();
+  if (title) return title;
+  const firstLine = (note.text || '').split('\n').map((line) => line.trim()).find(Boolean);
+  return firstLine ? firstLine.slice(0, 60) : 'Nota sem título';
+}
+
+function notePreview(note) {
+  const lines = (note.text || '').split('\n').map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 1) return lines.slice(1).join(' · ').slice(0, 140);
+  return lines[0] && lines[0] !== noteTitle(note) ? lines[0].slice(0, 140) : '';
+}
+
+function formatRemind(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return `hoje ${time}`;
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  if (date.toDateString() === tomorrow.toDateString()) return `amanhã ${time}`;
+  return `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+
+function toLocalInput(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function renderNotes() {
+  const project = getActiveProject();
+  if (project.activeNoteId && !project.notes.some((n) => n.id === project.activeNoteId)) project.activeNoteId = null;
+  if (!project.activeNoteId && project.notes.length) project.activeNoteId = project.notes[0].id;
+
+  const reminders = project.notes.filter((n) => n.remindAt).length;
+  $('#notesSummary').textContent = project.notes.length
+    ? `${project.notes.length} nota${project.notes.length === 1 ? '' : 's'}${reminders ? ` · ${reminders} lembrete${reminders === 1 ? '' : 's'}` : ''}`
+    : 'Nenhuma nota ainda';
+
+  renderNotesList();
+  renderNoteSheet();
+  updateSpecialStatus('notes');
+}
+
+function renderNotesList() {
+  const project = getActiveProject();
+  const list = $('#notesList');
+  if (!list) return;
+
+  list.innerHTML = project.notes.length
+    ? project.notes.map((note) => {
+      const overdue = note.remindAt && new Date(note.remindAt).getTime() < Date.now();
+      return `
+        <button type="button" class="note-card is-paper-${escapeHtml(note.paper || 'cream')}${note.id === project.activeNoteId ? ' is-active' : ''}" data-note-id="${escapeHtml(note.id)}">
+          <span class="note-card__top">
+            <span class="note-card__color"></span>
+            <span class="note-card__title">${escapeHtml(noteTitle(note))}</span>
+          </span>
+          ${notePreview(note) ? `<span class="note-card__preview">${escapeHtml(notePreview(note))}</span>` : ''}
+          <span class="note-card__foot">
+            ${note.remindAt ? `<span class="note-card__remind${overdue ? ' is-overdue' : ''}"><span data-icon="bell"></span>${escapeHtml(formatRemind(note.remindAt))}</span>` : ''}
+            <span>${escapeHtml(shortDate(note.updatedAt))}</span>
+          </span>
+        </button>`;
+    }).join('')
+    : '<div class="notes-empty">Nenhuma nota ainda.<br>Use <b>Nova nota</b> para guardar ideias e lembretes.</div>';
+
+  applyIcons(list);
+  list.querySelectorAll('[data-note-id]').forEach((card) => {
+    card.addEventListener('click', () => {
+      project.activeNoteId = card.dataset.noteId;
+      persist();
+      renderNotes();
+    });
+  });
+}
+
+function renderNoteSheet() {
+  const project = getActiveProject();
+  const sheet = $('#noteSheet');
+  if (!sheet) return;
+  const note = activeNote();
+
+  if (!note) {
+    sheet.innerHTML = `
+      <div class="note-sheet note-sheet--empty">
+        <span data-icon="note"></span>
+        <h3>Nenhuma nota selecionada</h3>
+        <p>Crie uma nota para anotar ideias, lembretes e próximos passos.</p>
+        <fluent-button id="noteEmptyAdd" appearance="accent">Criar nota</fluent-button>
+      </div>`;
+    applyIcons(sheet);
+    $('#noteEmptyAdd')?.addEventListener('click', createNote);
+    return;
+  }
+
+  sheet.innerHTML = `
+    <div class="note-sheet is-paper-${escapeHtml(note.paper || 'cream')}">
+      <div class="note-sheet__head">
+        <input class="note-sheet__title" id="noteTitleInput" value="${escapeHtml(note.title || '')}" placeholder="Título da nota" spellcheck="true" />
+      </div>
+      <textarea class="note-sheet__body" id="noteBodyInput" placeholder="Escreva aqui..." spellcheck="true">${escapeHtml(note.text || '')}</textarea>
+      <div class="note-sheet__foot">
+        <label class="note-sheet__remind"><span data-icon="bell"></span> Lembrete
+          <input type="datetime-local" id="noteRemindInput" value="${escapeHtml(toLocalInput(note.remindAt))}" />
+        </label>
+        <div class="note-sheet__actions">
+          <span class="note-sheet__stamp">Editada ${escapeHtml(shortDate(note.updatedAt))}</span>
+          <button type="button" class="mini-btn" id="notePaperBtn" title="Trocar a cor do papel"><span data-icon="note"></span> Papel</button>
+          <button type="button" class="mini-btn mini-btn--danger" id="noteDeleteBtn">Excluir</button>
+        </div>
+      </div>
+    </div>`;
+  applyIcons(sheet);
+
+  const titleInput = $('#noteTitleInput');
+  const bodyInput = $('#noteBodyInput');
+  const grow = () => {
+    bodyInput.style.height = 'auto';
+    bodyInput.style.height = `${Math.max(bodyInput.scrollHeight, 180)}px`;
+  };
+
+  titleInput.addEventListener('input', () => {
+    note.title = titleInput.value;
+    note.updatedAt = now();
+    persist();
+    clearTimeout(noteListTimer);
+    noteListTimer = setTimeout(renderNotesList, 250);
+  });
+
+  bodyInput.addEventListener('input', () => {
+    note.text = bodyInput.value;
+    note.updatedAt = now();
+    grow();
+    persist();
+    clearTimeout(noteListTimer);
+    noteListTimer = setTimeout(renderNotesList, 250);
+  });
+
+  $('#noteRemindInput').addEventListener('change', (e) => {
+    note.remindAt = e.target.value ? new Date(e.target.value).toISOString() : '';
+    note.updatedAt = now();
+    persist();
+    renderNotes();
+    if (note.remindAt) toast(`Lembrete para ${formatRemind(note.remindAt)}`);
+  });
+
+  $('#notePaperBtn').addEventListener('click', () => {
+    const index = PAPER_COLORS.indexOf(note.paper || 'cream');
+    note.paper = PAPER_COLORS[(index + 1) % PAPER_COLORS.length];
+    note.updatedAt = now();
+    persist();
+    renderNotes();
+  });
+
+  $('#noteDeleteBtn').addEventListener('click', () => requestDeleteNote(note.id));
+
+  requestAnimationFrame(grow);
+}
+
+function createNote() {
+  const project = getActiveProject();
+  const note = {
+    id: uid('note'),
+    title: '',
+    text: '',
+    paper: PAPER_COLORS[0],
+    remindAt: '',
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  project.notes.unshift(note);
+  project.activeNoteId = note.id;
+  persist();
+  renderNotes();
+  renderTree();
+  setTimeout(() => $('#noteTitleInput')?.focus(), 60);
+}
+
+function requestDeleteNote(noteId) {
+  const project = getActiveProject();
+  if (!project.notes.some((n) => n.id === noteId)) return;
+  pendingConfirm = () => {
+    project.notes = project.notes.filter((n) => n.id !== noteId);
+    if (project.activeNoteId === noteId) project.activeNoteId = project.notes[0]?.id || null;
+    persist();
+    renderNotes();
+    renderTree();
+    toast('Nota excluída');
+  };
+  $('#confirmTitle').textContent = 'Excluir nota?';
+  $('#confirmMessage').textContent = 'A nota e o lembrete serão removidos deste projeto. Esta ação não pode ser desfeita.';
+  $('#confirmDialog').show();
+}
+
+/* ------------------------------ atualizações ------------------------------ */
+
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
+const REPO_SLUG = 'PedroNunes0z/open-winlin-prompt';
+const RELEASES_LATEST = `https://api.github.com/repos/${REPO_SLUG}/releases/latest`;
+const SETUP_DOWNLOAD = `https://github.com/${REPO_SLUG}/releases/latest/download/open-winlin-prompt-setup.exe`;
+let latestRelease = null;
+
+function compareVersions(a, b) {
+  const parse = (value) => String(value || '').replace(/^v/i, '').split('.').map((part) => parseInt(part, 10) || 0);
+  const left = parse(a);
+  const right = parse(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  const status = $('#updateStatus');
+  const button = $('#updateCheckBtn');
+  const download = $('#updateDownloadBtn');
+  if (!status) return;
+
+  if (manual) {
+    button.disabled = true;
+    status.className = 'update-status';
+    status.textContent = 'Consultando o GitHub…';
+  }
+
+  try {
+    const response = await fetch(`${RELEASES_LATEST}?t=${Date.now()}`, {
+      headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const release = await response.json();
+    latestRelease = release;
+    const latest = String(release.tag_name || '').replace(/^v/i, '');
+
+    if (compareVersions(latest, APP_VERSION) > 0) {
+      status.className = 'update-status is-new';
+      status.textContent = `Nova versão ${latest} disponível — você está na ${APP_VERSION}.`;
+      download?.classList.remove('hidden');
+      $('#updateBadge')?.classList.remove('hidden');
+      if (manual) toast(`Nova versão ${latest} disponível`);
+    } else {
+      status.className = 'update-status is-ok';
+      status.textContent = `Você está na versão mais recente (${APP_VERSION}).`;
+      download?.classList.add('hidden');
+      $('#updateBadge')?.classList.add('hidden');
+    }
+  } catch (err) {
+    if (manual) {
+      status.className = 'update-status is-error';
+      status.textContent = navigator.onLine === false
+        ? 'Sem conexão com a internet agora.'
+        : `Não foi possível verificar agora (${err.message}).`;
+    }
+  } finally {
+    if (manual) button.disabled = false;
+  }
+}
+
+function downloadUpdate() {
+  const asset = latestRelease?.assets?.find((item) => /setup\.exe$/i.test(item.name));
+  const url = asset?.browser_download_url || SETUP_DOWNLOAD;
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  toast('Download da atualização iniciado');
+}
+
+function bindBoardAndNotesEvents() {
+  $('#boardAddTask')?.addEventListener('click', () => openTaskDialog());
+  document.querySelectorAll('#boardModeSwitch button').forEach((button) => {
+    button.addEventListener('click', () => {
+      boardMode = button.dataset.boardMode === 'list' ? 'list' : 'board';
+      renderBoard();
+    });
+  });
+
+  document.querySelectorAll('#taskColorPicker .sticky-swatch').forEach((button) => {
+    button.addEventListener('click', () => {
+      taskDraftColor = button.dataset.taskColor;
+      syncTaskColorPicker();
+    });
+  });
+  $('#taskSave')?.addEventListener('click', saveTaskDialog);
+  $('#taskCancel')?.addEventListener('click', () => { $('#taskDialog').hide(); taskEditingId = null; });
+  $('#taskTitleInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveTaskDialog(); }
+  });
+  $('#taskDeleteBtn')?.addEventListener('click', () => {
+    if (!taskEditingId) return;
+    const id = taskEditingId;
+    $('#taskDialog').hide();
+    pendingConfirm = () => deleteTask(id);
+    $('#confirmTitle').textContent = 'Excluir tarefa?';
+    $('#confirmMessage').textContent = 'O post-it será removido do quadro.';
+    $('#confirmDialog').show();
+    taskEditingId = null;
+  });
+
+  $('#noteAddBtn')?.addEventListener('click', createNote);
+
+  $('#updateCheckBtn')?.addEventListener('click', () => checkForUpdates({ manual: true }));
+  $('#updateDownloadBtn')?.addEventListener('click', downloadUpdate);
+  $('#appVersion').textContent = APP_VERSION;
+}
+
 /* ---------------------------------- boot ---------------------------------- */
 
 // Logo (logo.svg) injetada inline para herdar a cor do tema via CSS.
 document.querySelector('.app-mark').innerHTML = logoSvg;
 applyIcons();
 bindEvents();
+bindBoardAndNotesEvents();
 renderAll();
 persist({ immediate: true });
+// verifica atualizações em silêncio (se não houver internet, ignora)
+setTimeout(() => checkForUpdates(), 2500);
 // move anexos antigos do localStorage para o IndexedDB (uma vez só)
 migrateLegacyAttachments(state).then((changed) => { if (changed) persist({ immediate: true }); }).catch(() => {});
 checkAiModel();

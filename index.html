@@ -38,6 +38,7 @@
       <span class="titlebar__sep"></span>
       <fluent-button id="settingsBtn" appearance="transparent" class="icon-btn" title="Configurações e temas">
         <span data-icon="settings"></span>
+        <span id="updateBadge" class="update-badge hidden" title="Nova versão disponível"></span>
       </fluent-button>
     </div>
 
@@ -59,6 +60,17 @@
         <button type="button" class="swatch" data-accent="green" title="Verde" style="--swatch:#6ccb8f;--swatch-soft:#c5eed4"><span>Verde</span></button>
         <button type="button" class="swatch" data-accent="orange" title="Laranja" style="--swatch:#ffab70;--swatch-soft:#ffdcbd"><span>Laranja</span></button>
         <button type="button" class="swatch" data-accent="pink" title="Rosa" style="--swatch:#ff8fc7;--swatch-soft:#ffc9e2"><span>Rosa</span></button>
+      </div>
+      <div class="settings-panel__title settings-panel__title--spaced">Atualizações</div>
+      <div class="update-box">
+        <div class="update-box__row">
+          <span class="update-box__version">Versão <b id="appVersion">—</b></span>
+          <button type="button" class="mini-btn update-check" id="updateCheckBtn"><span data-icon="refresh"></span> Verificar</button>
+        </div>
+        <div id="updateStatus" class="update-status">Procurando novas versões…</div>
+        <button type="button" id="updateDownloadBtn" class="update-cta hidden">
+          <span data-icon="arrow-down"></span> Baixar atualização
+        </button>
       </div>
       <div class="settings-panel__title settings-panel__title--spaced">Sugestões de escrita</div>
       <p class="ai-desc">A IA roda no seu computador (Ollama) e sugere o próximo trecho enquanto você escreve. Nada é enviado para a internet.</p>
@@ -124,9 +136,6 @@
 
   <div class="main">
     <aside class="sidebar">
-      <div class="sidebar__head">
-        <span class="sidebar__heading">Arquivos</span>
-      </div>
       <div id="projectInfo" class="project-info"></div>
       <div id="tree" class="tree" role="tree" aria-label="Arquivos do projeto"></div>
       <div class="sidebar__foot">
@@ -176,6 +185,39 @@
         <h2>Nenhum prompt aberto</h2>
         <p>Selecione um arquivo markdown na lateral ou crie um novo prompt para começar.</p>
         <fluent-button id="emptyNewBtn" appearance="accent">Criar prompt</fluent-button>
+      </div>
+
+      <div id="boardView" class="special-view hidden">
+        <div class="special-head">
+          <span class="special-head__title"><span data-icon="board"></span> Quadro de tarefas</span>
+          <span class="special-head__meta" id="boardSummary"></span>
+          <div class="special-head__actions">
+            <div class="segmented" id="boardModeSwitch" role="tablist" aria-label="Modo de exibição">
+              <button type="button" data-board-mode="board">Quadro</button>
+              <button type="button" data-board-mode="list">Lista</button>
+            </div>
+            <fluent-button id="boardAddTask" appearance="accent" size="small">
+              <span data-icon="add"></span> Nova tarefa
+            </fluent-button>
+          </div>
+        </div>
+        <div id="boardCanvas" class="board-canvas"></div>
+      </div>
+
+      <div id="notesView" class="special-view hidden">
+        <div class="special-head">
+          <span class="special-head__title"><span data-icon="note"></span> Notas e lembretes</span>
+          <span class="special-head__meta" id="notesSummary"></span>
+          <div class="special-head__actions">
+            <fluent-button id="noteAddBtn" appearance="accent" size="small">
+              <span data-icon="add"></span> Nova nota
+            </fluent-button>
+          </div>
+        </div>
+        <div class="notes-layout">
+          <aside id="notesList" class="notes-list" aria-label="Notas"></aside>
+          <section id="noteSheet" class="note-sheet-wrap"></section>
+        </div>
       </div>
 
       <div id="attachmentView" class="attachment-view hidden">
@@ -308,6 +350,44 @@
     <div id="libraryDetail"></div>
     <div class="dialog__actions">
       <fluent-button id="libraryDetailClose" appearance="stealth">Fechar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="taskDialog" dialog-label="Tarefa">
+  <div class="dialog dialog--wide">
+    <div class="dialog__title" id="taskDialogTitle">Nova tarefa</div>
+    <p class="dialog__desc">Escreva a tarefa, escolha a cor do post-it e a coluna do quadro.</p>
+    <div class="task-form">
+      <div class="library-field">
+        <label for="taskTitleInput">Tarefa</label>
+        <fluent-text-input id="taskTitleInput" placeholder="ex.: Revisar o prompt do cliente" autofocus></fluent-text-input>
+      </div>
+      <div class="library-field">
+        <label for="taskDetailInput">Detalhes (opcional)</label>
+        <fluent-textarea id="taskDetailInput" rows="2" placeholder="Anotações rápidas sobre esta tarefa"></fluent-textarea>
+      </div>
+      <div class="library-field">
+        <label>Cor do post-it</label>
+        <div class="sticky-swatches" id="taskColorPicker">
+          <button type="button" class="sticky-swatch" data-task-color="yellow" title="Amarelo"></button>
+          <button type="button" class="sticky-swatch" data-task-color="pink" title="Rosa"></button>
+          <button type="button" class="sticky-swatch" data-task-color="mint" title="Verde"></button>
+          <button type="button" class="sticky-swatch" data-task-color="sky" title="Azul"></button>
+          <button type="button" class="sticky-swatch" data-task-color="lilac" title="Lilás"></button>
+          <button type="button" class="sticky-swatch" data-task-color="peach" title="Pêssego"></button>
+        </div>
+      </div>
+      <div class="library-field">
+        <label for="taskColumnSelect">Coluna</label>
+        <select id="taskColumnSelect" class="ai-select"></select>
+      </div>
+    </div>
+    <div class="dialog__actions dialog__actions--split">
+      <button type="button" class="mini-btn mini-btn--danger hidden" id="taskDeleteBtn">Excluir</button>
+      <span class="dialog__spacer"></span>
+      <fluent-button id="taskCancel" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="taskSave" appearance="accent">Salvar</fluent-button>
     </div>
   </div>
 </fluent-dialog>
