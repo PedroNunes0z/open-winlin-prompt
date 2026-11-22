@@ -303,6 +303,20 @@ fluent-progress-bar { display: block; width: 100%; }
 .fmt-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 .fmt-btn > span[data-icon] { display: inline-flex; }
 .fmt-btn svg { width: 15px; height: 15px; }
+.toolbar__group--left { gap: 10px; }
+.toolbar__divider { width: 1px; height: 20px; flex: 0 0 1px; background: var(--stroke-subtle); }
+.improve-btn { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.improve-btn > span[data-icon] svg { width: 16px; height: 16px; }
+.improve-btn.is-busy { opacity: 0.6; pointer-events: none; }
+.improve-textarea {
+  width: 100%; min-height: 260px; max-height: 52vh; resize: vertical;
+  padding: 12px 14px; border: 1px solid var(--stroke); border-radius: 7px;
+  background: var(--bg-app); color: var(--text-primary);
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65;
+  white-space: pre-wrap; outline: none;
+}
+.improve-textarea:focus { border-color: var(--accent); }
+fluent-dialog#improveDialog::part(dialog) { width: min(720px, calc(100vw - 32px)); }
 
 .split { flex: 1; display: flex; min-height: 0; min-width: 0; }
 .split.is-empty { display: none; }
@@ -342,7 +356,10 @@ fluent-progress-bar { display: block; width: 100%; }
 }
 .mention-tag::selection { background: transparent; }
 
-/* ----- pré-visualização simples das formatações no próprio editor ----- */
+/* ----- pré-visualização simples das formatações no próprio editor -----
+   Todos os destaques são INLINE: a única quebra de linha é o "\n" do texto
+   (white-space: pre-wrap). Com display:block/margens cada linha formatada
+   ganhava quebras visuais extras -> linhas vazias fantasmas. */
 .editor-input .fmt-bold { font-weight: 700; color: var(--text-primary); }
 .editor-input .fmt-italic { font-style: italic; }
 .editor-input .fmt-strike { text-decoration: line-through; opacity: 0.75; }
@@ -352,23 +369,39 @@ fluent-progress-bar { display: block; width: 100%; }
 }
 .editor-input .fmt-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .editor-input .fmt-math { color: var(--code-type); }
-.editor-input .editor-heading { display: block; font-family: var(--font-ui); font-weight: 700; color: var(--text-primary); }
-.editor-input .editor-h1 { font-size: 21px; line-height: 1.35; margin: 6px 0 2px; }
-.editor-input .editor-h2 { font-size: 18px; line-height: 1.4; margin: 5px 0 2px; }
-.editor-input .editor-h3 { font-size: 15.5px; line-height: 1.45; }
-.editor-input .editor-h4, .editor-input .editor-h5, .editor-input .editor-h6 { font-size: 13.5px; line-height: 1.5; }
-.editor-input .editor-list { display: block; padding-left: 16px; color: var(--text-secondary); }
+.editor-input .editor-heading {
+  font-family: var(--font-ui); font-weight: 700; color: var(--text-primary);
+  line-height: inherit;
+}
+.editor-input .editor-h1 { font-size: 20px; }
+.editor-input .editor-h2 { font-size: 17px; }
+.editor-input .editor-h3 { font-size: 15px; }
+.editor-input .editor-h4, .editor-input .editor-h5, .editor-input .editor-h6 { font-size: 13.5px; font-weight: 600; }
+/* A indentação real já está no texto (fonte monoespaçada): os níveis só
+   diferenciam visualmente os itens aninhados, sem padding que desalinhe. */
+.editor-input .editor-list { color: var(--text-secondary); }
+.editor-input .editor-list-level-1 { color: color-mix(in srgb, var(--text-secondary) 82%, var(--accent)); }
+.editor-input .editor-list-level-2 { color: color-mix(in srgb, var(--text-secondary) 68%, var(--accent)); }
+.editor-input .editor-list-level-3,
+.editor-input .editor-list-level-4,
+.editor-input .editor-list-level-5 { color: color-mix(in srgb, var(--text-secondary) 55%, var(--accent)); }
+.editor-input .editor-task { font-weight: 600; }
 .editor-input .editor-quote {
-  display: block; padding-left: 10px; margin-left: 2px;
-  border-left: 3px solid var(--accent); color: var(--text-secondary);
+  padding-left: 6px; margin-left: 0; border-left: 2px solid var(--accent);
+  color: var(--text-secondary); -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
-.editor-input .editor-hr { display: block; text-align: center; color: var(--text-tertiary); letter-spacing: 4px; }
-.editor-input .editor-table { display: block; font-size: 12px; color: var(--text-secondary); }
+.editor-input .editor-hr { color: var(--text-tertiary); letter-spacing: 4px; }
+.editor-input .editor-table { font-size: 12px; color: var(--text-secondary); }
 .editor-input .editor-codeblock {
-  display: block; margin: 4px 0; padding: 10px 12px; white-space: pre-wrap;
-  background: var(--md-code-bg); border: 1px solid var(--stroke-subtle); border-radius: 6px;
-  color: var(--code-attr); font-size: 12.3px; line-height: 1.55;
+  padding: 2px 6px; white-space: pre-wrap;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  background: var(--md-code-bg); border-radius: 5px;
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--code-attr); font-size: 12.3px;
 }
+.editor-input .editor-codeblock--open { box-shadow: inset 2px 0 0 var(--danger); }
+/* O <br> sentinela do fim é ignorado na leitura, mas precisa ficar visível:
+   em pre-wrap a última "\n" sozinha não abre a linha vazia do cursor. */
 
 .split-divider { width: 5px; flex: 0 0 5px; cursor: col-resize; position: relative; background: var(--stroke-subtle); }
 .split-divider:hover, .is-resizing .split-divider { background: var(--accent); }
@@ -415,7 +448,7 @@ fluent-progress-bar { display: block; width: 100%; }
 .markdown-body h2 { font-size: 1.5em; padding-bottom: 0.25em; border-bottom: 1px solid var(--stroke-subtle); }
 .markdown-body h3 { font-size: 1.22em; }
 .markdown-body h4 { font-size: 1.08em; }
-.markdown-body p { margin: 0.7em 0; }
+.markdown-body p { margin: 0.6em 0; }
 .markdown-body a { color: var(--accent); text-decoration: none; }
 .markdown-body a:hover { text-decoration: underline; }
 .markdown-body ul, .markdown-body ol { padding-left: 1.6em; margin: 0.6em 0; }

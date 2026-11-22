@@ -183,7 +183,7 @@
       <div id="tabs" class="tabs" role="tablist"></div>
 
       <div class="toolbar" id="toolbar">
-        <div class="toolbar__group">
+        <div class="toolbar__group toolbar__group--left">
           <div class="format-group" aria-label="Formatação">
             <button class="fmt-btn" data-format="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
             <button class="fmt-btn" data-format="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
@@ -193,6 +193,10 @@
             <button class="fmt-btn" data-format="list" title="Lista"><span data-icon="list"></span></button>
             <button class="fmt-btn" data-format="quote" title="Citação"><span data-icon="quote"></span></button>
           </div>
+          <span class="toolbar__divider" aria-hidden="true"></span>
+          <fluent-button id="improveBtn" appearance="stealth" class="tool-btn improve-btn" title="Melhorar prompt (limpeza local ou IA local)" type="button">
+            <span data-icon="sparkle"></span> Melhorar prompt
+          </fluent-button>
         </div>
         <div class="toolbar__group toolbar__group--right">
           <fluent-button id="copyBtn" appearance="stealth" class="tool-btn" title="Copiar markdown (Ctrl+Shift+C)">
@@ -418,6 +422,18 @@
       <span class="dialog__spacer"></span>
       <fluent-button id="taskCancel" appearance="stealth">Cancelar</fluent-button>
       <fluent-button id="taskSave" appearance="accent">Salvar</fluent-button>
+    </div>
+  </div>
+</fluent-dialog>
+
+<fluent-dialog id="improveDialog" dialog-label="Melhorar prompt">
+  <div class="dialog dialog--wide">
+    <div class="dialog__title">Melhorar prompt</div>
+    <p class="dialog__desc" id="improveDesc">Revise o resultado antes de aplicar. Nada é alterado no editor até você confirmar.</p>
+    <textarea id="improveText" class="improve-textarea" spellcheck="false" aria-label="Prompt melhorado"></textarea>
+    <div class="dialog__actions">
+      <fluent-button id="improveCancelBtn" appearance="stealth">Cancelar</fluent-button>
+      <fluent-button id="improveApplyBtn" appearance="accent">Aplicar ao prompt</fluent-button>
     </div>
   </div>
 </fluent-dialog>

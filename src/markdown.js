@@ -80,7 +80,9 @@ const renderer = {
 const md = new Marked(
   {
     gfm: true,
-    breaks: false,
+    // Uma quebra simples no editor aparece como quebra simples na prévia
+    // (o editor é pre-wrap). Só a linha EM BRANCO separa parágrafos.
+    breaks: true,
     pedantic: false,
   },
   markedHighlight({
@@ -100,7 +102,10 @@ md.use({ extensions: [mathExtension] });
 md.use({ renderer });
 
 export function renderMarkdown(source = '') {
-  const rawHtml = md.parse(source || '');
+  // Normaliza apenas o estilo de quebra (CRLF/CR do Windows). Nenhuma linha em
+  // branco é inserida ou removida: a prévia recebe exatamente o texto digitado.
+  const text = String(source ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const rawHtml = md.parse(text);
   const html = DOMPurify.sanitize(rawHtml, {
     ADD_ATTR: ['target', 'rel', 'loading', 'align', 'aria-hidden', 'style'],
     ADD_TAGS: ['annotation', 'math', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'ms', 'mtext', 'mspace', 'msub', 'msup', 'msubsup', 'mfrac', 'msqrt', 'mroot', 'mstyle', 'mpadded', 'mphantom', 'menclose', 'mtable', 'mtr', 'mtd', 'maction', 'mglyph', 'mlabeledtr', 'mmultiscripts', 'mover', 'munder', 'munderover', 'none'],

@@ -19,7 +19,7 @@ import {
 } from './store.js';
 import { renderMarkdown } from './markdown.js';
 import { MentionController } from './mentions.js';
-import { readEditor, writeEditor, insertText, wrapSelection, toggleWrap, toggleLinePrefix } from './editor.js';
+import { readEditor, writeEditor, caretOffsets, fenceFor, codeBlockAt, improvePromptText, MarkdownEditor } from './editor.js';
 import { putBlob, getBlob, deleteBlob, getAttachmentText, getAttachmentUrl, migrateLegacyAttachments } from './attachment-data.js';
 import { applyIcons, icons, fileIcon } from './icons.js';
 import logoSvg from './assets/img/logo.svg?raw';
@@ -73,6 +73,9 @@ let renameTarget = null;
 let pendingConfirm = null;
 let previewVisible = true;
 let previewTimer = null;
+let editorCtl = null; // controlador do editor (uma única fonte de verdade de texto)
+let improveAbort = null;
+let improveRunning = false;
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -480,27 +483,16 @@ async function downloadAiModel() {
 }
 
 function aiCaretContext() {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || !els.editor.contains(selection.getRangeAt(0).startContainer)) return null;
-  const range = selection.getRangeAt(0);
-  const prefixRange = range.cloneRange();
-  prefixRange.selectNodeContents(els.editor);
-  prefixRange.setEnd(range.startContainer, range.startOffset);
+  const caret = caretOffsets(els.editor);
+  if (!caret || document.activeElement !== els.editor) return null;
   const text = readEditor(els.editor);
-  const offset = prefixRange.toString().length;
-  return { prefix: text.slice(0, offset), suffix: text.slice(offset) };
+  return { prefix: text.slice(0, caret.start), suffix: text.slice(caret.start) };
 }
 
 // Posição do cursor (offset no texto) — usada para garantir que a sugestão
 // ainda corresponde ao lugar onde o usuário está escrevendo.
 function caretOffsetNow() {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || !els.editor.contains(selection.getRangeAt(0).startContainer)) return null;
-  const range = selection.getRangeAt(0);
-  const before = range.cloneRange();
-  before.selectNodeContents(els.editor);
-  before.setEnd(range.startContainer, range.startOffset);
-  return before.toString().length;
+  return caretOffsets(els.editor)?.start ?? null;
 }
 
 async function requestAiSuggestion() {
@@ -665,7 +657,7 @@ function acceptAiSuggestion() {
   if (!aiSuggestionText) return;
   const text = aiSuggestionText;
   hideAiSuggestion();
-  insertText(els.editor, text);
+  editorCtl.insert(text);
 }
 
 function scheduleAiSuggestion() {
@@ -714,28 +706,6 @@ function selectionOffsets() {
     end: offsetOf(range.endContainer, range.endOffset),
     text: range.toString(),
   };
-}
-
-function rangeFromOffsets(start, end) {
-  const walker = document.createTreeWalker(els.editor, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  const locate = (target) => {
-    let remaining = target;
-    for (const node of nodes) {
-      if (remaining <= node.textContent.length) return { node, offset: remaining };
-      remaining -= node.textContent.length;
-    }
-    const last = nodes[nodes.length - 1];
-    return last ? { node: last, offset: last.textContent.length } : null;
-  };
-  const from = locate(start);
-  const to = locate(end);
-  if (!from || !to) return null;
-  const range = document.createRange();
-  range.setStart(from.node, from.offset);
-  range.setEnd(to.node, to.offset);
-  return range;
 }
 
 function positionNearSelection(box) {
@@ -826,15 +796,11 @@ async function runSelectionAction(action) {
 
 function acceptSelectionResult() {
   if (!selResultText || !selInfo) return;
-  const range = rangeFromOffsets(selInfo.start, selInfo.end);
-  if (!range) { hideSelectionResult(); return; }
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
+  const { start, end } = selInfo;
   const text = selResultText;
   hideSelectionResult();
   selInfo = null;
-  insertText(els.editor, text);
+  editorCtl.replaceRange(start, end, text);
 }
 
 /* ---------------------- biblioteca: APIs, IDEs, WebSites ---------------------- */
@@ -1365,6 +1331,7 @@ function updatePreview(source) {
 
 function renderEditor() {
   hideAiSuggestion();
+  clearTimeout(previewTimer);
   const { project, prompt } = currentPrompt();
 
   // abas especiais (quadro de tarefas, notas) e de anexo ocupam a área do editor
@@ -1448,6 +1415,7 @@ function scheduleHistory() {
 function applyHistoryContent(content) {
   const { prompt } = currentPrompt();
   if (!prompt) return;
+  hideAiSuggestion();
   prompt.content = content;
   prompt.updatedAt = now();
   writeEditor(els.editor, content, referenceNames(), { preserveCaret: true });
@@ -1667,18 +1635,7 @@ function insertAtCursor(text) {
     toast('Abra um prompt antes de inserir conteúdo', 'error');
     return;
   }
-  insertText(els.editor, text);
-  prompt.content = readEditor(els.editor);
-  prompt.updatedAt = now();
-  updatePreview();
-  updateStatus();
-  persist();
-}
-
-function fenceFor(content) {
-  const runs = content.match(/`+/g) || [];
-  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
-  return '`'.repeat(Math.max(3, longest + 1));
+  editorCtl.insert(text);
 }
 
 async function insertAttachment(attachment) {
@@ -1815,39 +1772,173 @@ async function addFiles(fileList) {
 }
 
 function applyFormat(kind) {
-  const editor = els.editor;
+  if (!editorCtl) return;
   switch (kind) {
     case 'bold':
-      toggleWrap(editor, '**', '**', 'texto em negrito');
+      editorCtl.toggleWrap('**', '**', 'texto em negrito');
       break;
     case 'italic':
-      toggleWrap(editor, '*', '*', 'texto em itálico');
+      editorCtl.toggleWrap('*', '*', 'texto em itálico');
       break;
     case 'heading':
-      toggleWrap(editor, '## ', '', 'Título');
+      // "## " no meio da linha não é título: é prefixo de linha.
+      editorCtl.toggleHeading(2);
       break;
     case 'code': {
+      const text = readEditor(els.editor);
+      const caret = editorCtl.caret;
       const selection = window.getSelection()?.toString() || '';
-      const fence = fenceFor(selection || 'código');
-      if (selection.includes('\n') || !selection) {
-        wrapSelection(editor, `${fence}js\n`, `\n${fence}`, 'console.log("Olá!");');
+      // Dentro de um bloco cerca, o botão sempre DESFAZ a cerca.
+      if (codeBlockAt(text, caret?.start ?? text.length) || selection.includes('\n') || !selection.trim()) {
+        editorCtl.toggleCodeBlock('console.log("Olá!");');
       } else {
-        toggleWrap(editor, '`', '`', 'código');
+        editorCtl.toggleWrap('`', '`', 'código');
       }
       break;
     }
     case 'link':
-      toggleWrap(editor, '[', '](https://)', 'texto do link');
+      editorCtl.toggleWrap('[', '](https://)', 'texto do link');
       break;
     case 'list':
-      toggleLinePrefix(editor, '- ');
+      editorCtl.toggleList();
       break;
     case 'quote':
-      toggleLinePrefix(editor, '> ');
+      editorCtl.toggleQuote();
       break;
     default:
       return;
   }
+}
+
+// Uma única rotina reage a QUALQUER mudança de texto do editor, seja ela
+// digitada, colada, desfeita ou vinda de uma ação da IA.
+function afterEditorChange(text) {
+  const { prompt } = currentPrompt();
+  if (!prompt) return;
+  prompt.content = text;
+  prompt.updatedAt = now();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => updatePreview(), 60);
+  updateStatus();
+  persist();
+  hideSelectionTools();
+  hideSelectionResult();
+  scheduleHistory();
+  scheduleAiSuggestion();
+}
+
+/* --------------------------- melhorar prompt ------------------------------ */
+// Sem IA local: limpeza determinística (quebras, espaços, blocos), preservando
+// o conteúdo dos blocos de código. Com IA local: reescrita completa via Ollama,
+// sempre com revisão do usuário antes de aplicar.
+
+const IMPROVE_INSTRUCTION = [
+  'Você é um especialista em engenharia de prompts.',
+  'Reescreva e melhore o prompt abaixo: deixe as instruções mais claras,',
+  'objetivas e completas, organizando em seções quando fizer sentido.',
+  'REGRAS OBRIGATÓRIAS:',
+  '- Preserve o idioma original do texto.',
+  '- Preserve a sintaxe markdown, títulos, listas, citações e blocos de código cercados (```), sem alterar o conteúdo do código.',
+  '- Preserve as linhas em branco significativas; NÃO adicione linhas em branco extras nem remova as existentes.',
+  '- Não invente requisitos, arquivos ou ferramentas que o usuário não citou.',
+  '- Responda APENAS com o prompt melhorado, sem explicações, sem comentários e sem envolvê-lo em cercas de código.',
+].join('\n');
+
+const IMPROVE_HINT_LOCAL = 'Limpeza local aplicada: linhas em branco, espaços e marcadores normalizados (blocos de código preservados). Ligue a IA local na engrenagem para uma reescrita completa do conteúdo.';
+const IMPROVE_HINT_AI = 'A IA local reescreveu o prompt. Revise/edite o texto abaixo e clique em “Aplicar ao prompt”. O original só é substituído depois da confirmação (Ctrl+Z desfaz).';
+const IMPROVE_HINT_ERROR = 'Não foi possível usar a IA local. Mostrando apenas a limpeza local — você ainda pode editar e aplicar. Verifique se o Ollama está aberto.';
+
+function setImproveBusy(busy) {
+  improveRunning = busy;
+  $('#improveBtn')?.classList.toggle('is-busy', busy);
+  const apply = $('#improveApplyBtn');
+  if (apply) apply.disabled = busy;
+}
+
+function openImproveDialog() {
+  const { prompt } = currentPrompt();
+  if (!prompt) { toast('Abra um prompt antes de melhorar', 'error'); return; }
+  const original = readEditor(els.editor);
+  if (!original.trim()) { toast('Escreva algo no prompt antes de melhorar', 'error'); return; }
+
+  const area = $('#improveText');
+  const desc = $('#improveDesc');
+  openById('improveDialog');
+  const useAi = aiSettings().enabled && aiModelReady && !aiDownloading;
+
+  if (!useAi) {
+    improveAbort?.abort();
+    improveAbort = null;
+    area.value = improvePromptText(original);
+    desc.textContent = IMPROVE_HINT_LOCAL;
+    setImproveBusy(false);
+    return;
+  }
+
+  improveAbort?.abort();
+  improveAbort = new AbortController();
+  const controller = improveAbort;
+  setImproveBusy(true);
+  desc.textContent = 'A IA local está reescrevendo o prompt. Isso pode levar alguns instantes...';
+  area.value = original;
+  aiLastGen = { status: 'busy', ms: 0, at: Date.now() };
+  updateAiStatusBar();
+  const startedAt = performance.now();
+
+  (async () => {
+    try {
+      const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: AI_MODEL,
+          prompt: `${IMPROVE_INSTRUCTION}\n\n--- PROMPT ORIGINAL ---\n${original}\n--- FIM ---\n`,
+          stream: false,
+          keep_alive: '30m',
+          options: { temperature: 0.25, num_predict: 2048, num_ctx: 8192 },
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (improveAbort !== controller) return;
+      let result = String(data.response || '').trim();
+      // modelo teimoso que envolve a resposta em ```markdown ... ```
+      result = result.replace(/^```[^\n]*\n/, '').replace(/\n```\s*$/, '');
+      if (!result) throw new Error('resposta vazia');
+      area.value = improvePromptText(result);
+      desc.textContent = IMPROVE_HINT_AI;
+      aiLastGen = { status: 'ok', ms: performance.now() - startedAt, at: Date.now() };
+    } catch (error) {
+      if (improveAbort !== controller) return;
+      area.value = improvePromptText(original);
+      desc.textContent = IMPROVE_HINT_ERROR;
+      aiLastGen = { status: 'error', ms: performance.now() - startedAt, at: Date.now() };
+      if (error?.name !== 'AbortError') toast('A IA local não respondeu — aplicada apenas a limpeza local', 'error');
+    } finally {
+      if (improveAbort === controller) {
+        improveAbort = null;
+        setImproveBusy(false);
+        updateAiStatusBar();
+      }
+    }
+  })();
+}
+
+function applyImprovedPrompt() {
+  const { prompt } = currentPrompt();
+  if (!prompt) { $('#improveDialog').hide(); return; }
+  const text = String($('#improveText').value || '').replace(/\r\n?/g, '\n');
+  if (text === readEditor(els.editor)) {
+    $('#improveDialog').hide();
+    toast('Nenhuma alteração para aplicar');
+    return;
+  }
+  pushHistory();
+  editorCtl.commit(text, { start: text.length, end: text.length });
+  pushHistory(); // garante que um Ctrl+Z imediato já volte ao original
+  $('#improveDialog').hide();
+  toast('Prompt melhorado aplicado — Ctrl+Z desfaz');
 }
 
 function focusSearch() {
@@ -1964,8 +2055,19 @@ function bindEvents() {
   });
 
   document.querySelectorAll('[data-format]').forEach((button) => {
+    // não deixa o clique roubar a seleção/foco do editor
+    button.addEventListener('mousedown', (e) => e.preventDefault());
     button.addEventListener('click', () => applyFormat(button.dataset.format));
   });
+
+  $('#improveBtn').addEventListener('click', openImproveDialog);
+  $('#improveCancelBtn').addEventListener('click', () => {
+    improveAbort?.abort();
+    improveAbort = null;
+    setImproveBusy(false);
+    $('#improveDialog').hide();
+  });
+  $('#improveApplyBtn').addEventListener('click', applyImprovedPrompt);
 
   const settingsPanel = $('#settingsPanel');
   $('#settingsBtn').addEventListener('click', (e) => {
@@ -2078,32 +2180,10 @@ function bindEvents() {
     }
   });
 
-  let highlightTimer = null;
-  els.editor.addEventListener('input', () => {
-    const { prompt } = currentPrompt();
-    if (!prompt) return;
-    prompt.content = readEditor(els.editor);
-    prompt.updatedAt = now();
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(() => updatePreview(), 60);
-    // pré-visualização simples das formatações dentro do próprio editor
-    clearTimeout(highlightTimer);
-    highlightTimer = setTimeout(() => {
-      // não reconstrói o editor com texto fantasma ativo — ele seria apagado
-      if (!aiSuggestionText && !els.mentionDropdown.classList.contains('is-visible')) {
-        writeEditor(els.editor, readEditor(els.editor), referenceNames(), { preserveCaret: true });
-      }
-    }, 300);
-    updateStatus();
-    persist();
-    hideSelectionTools();
-    hideSelectionResult();
-    scheduleHistory();
-    scheduleAiSuggestion();
-  });
-
-  // Caixinha de ações da IA: aparece só quando o usuário SOLTA o mouse
-  // (ou termina de selecionar pelo teclado), nunca durante o arrasto.
+  // O controlador do editor é a única fonte de verdade do texto: ele
+  // intercepta a digitação, normaliza qualquer DOM nativo e chama
+  // afterEditorChange. Não há mais reconstrução assíncrona em paralelo.
+  // (selectionTools continua abaixo, independente da edição.)
   let selectingText = false;
   els.editor.addEventListener('pointerdown', () => { selectingText = true; hideSelectionTools(); });
   document.addEventListener('pointerup', () => {
@@ -2136,15 +2216,8 @@ function bindEvents() {
 
   els.editor.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
-    // Enter: inserimos a quebra nós mesmos. O contenteditable do Chrome
-    // coloca o cursor antes da quebra que ele mesmo criou, o que fazia o texto
-    // seguinte entrar na linha errada ("parecia" que o Enter não funcionava).
-    if (e.key === 'Enter' && !mod) {
-      e.preventDefault();
-      hideAiSuggestion();
-      insertText(els.editor, '\n');
-      return;
-    }
+    // Enter e Tab são tratados pelo controlador (quebra única e indentação).
+    // Aqui ficam apenas os atalhos e as interações com a IA.
     if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoEdit(); return; }
     if (mod && ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')) { e.preventDefault(); redoEdit(); return; }
     if (e.key === 'Escape' && selResultText) { e.preventDefault(); hideSelectionResult(); return; }
@@ -2171,20 +2244,10 @@ function bindEvents() {
       return;
     }
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) hideAiSuggestion();
-    if (e.key === 'Enter' && !e.defaultPrevented && !els.mentionDropdown.classList.contains('is-visible')) {
-      e.preventDefault();
-      insertText(els.editor, '\n');
-    }
   });
 
   els.editor.addEventListener('click', hideAiSuggestion);
   els.editor.addEventListener('scroll', hideSelectionTools);
-
-  els.editor.addEventListener('paste', (e) => {
-    e.preventDefault();
-    const text = e.clipboardData?.getData('text/plain') || '';
-    if (text) insertText(els.editor, text);
-  });
 
   els.preview.addEventListener('click', (e) => {
     const link = e.target.closest('a[href]');
@@ -2263,6 +2326,24 @@ function bindEvents() {
       ];
     },
     onSelect: (file) => toast(`Referência @${file.name} inserida`),
+  });
+
+  // Registrado por último: os listeners acima (atalhos, IA e dropdown de @)
+  // têm prioridade e podem cancelar Enter/Tab com preventDefault.
+  editorCtl = new MarkdownEditor({
+    element: els.editor,
+    getNames: referenceNames,
+    onCommit: ({ text }) => afterEditorChange(text),
+    onHistory: (kind) => (kind === 'undo' ? undoEdit() : redoEdit()),
+    onFormat: (type) => {
+      if (type === 'formatBold') applyFormat('bold');
+      else if (type === 'formatItalic') applyFormat('italic');
+    },
+    onEditStart: () => {
+      hideAiSuggestion();
+      hideSelectionTools();
+      hideSelectionResult();
+    },
   });
 }
 

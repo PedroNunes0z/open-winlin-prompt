@@ -1,47 +1,184 @@
-// Editor markdown com pré-visualização simples das formatações no próprio editor.
-// O texto continua sendo markdown cru (editável); os trechos formatados recebem
-// apenas classes visuais (negrito, título, código, link etc.).
+// Editor markdown com UMA única fonte de verdade: a string de texto.
+//
+// O contenteditable é apenas uma renderização determinística dessa string:
+//   - cada "\n" do modelo é exatamente um nó de texto com "\n";
+//   - nunca deixamos <div>, <p> ou <br> criados pelo navegador virarem linhas;
+//   - um único <br class="editor-tail-br"> (ignorado na leitura) existe só para
+//     o cursor aparecer na última linha vazia, quando o texto termina em "\n".
+//
+// Toda edição passa por beforeinput -> modelo -> reconstrução do DOM. O que não
+// for interceptado (IME, cortar, arrastar) é normalizado no evento input.
+// Assim o texto do usuário é preservado caractere por caractere, sem linhas em
+// branco fantasmas surgindo durante a digitação ou a renderização.
 
-// Blocos que o próprio navegador cria ao apertar Enter (<div>, <p>…).
-// Cada um deles vale por uma linha — sem isso, o Enter some na releitura
-// e era preciso apertar várias vezes para a linha realmente quebrar.
-const BLOCK_TAGS = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE|PRE|SECTION|ARTICLE)$/;
+const TAIL_BR_CLASS = 'editor-tail-br';
 
-function readNode(node) {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent;
-  if (node.nodeType !== Node.ELEMENT_NODE) return '';
-  if (node.classList?.contains('mention-tag')) {
-    return `@${node.dataset.mention || node.textContent.replace(/^@/, '')}`;
-  }
-  // o texto fantasma da sugestão nunca faz parte do documento
-  if (node.classList?.contains('ghost-suggestion')) return '';
-  if (node.tagName === 'BR') return '\n';
-  if (BLOCK_TAGS.test(node.tagName)) {
-    const inner = readChildren(node);
-    return inner === '' ? '\n' : `${inner.endsWith('\n') ? inner : `${inner}\n`}`;
-  }
-  return readChildren(node);
-}
+// Blocos que o navegador eventualmente cria sozinho (fallback de leitura).
+// Cada bloco "folha" vale uma quebra de linha; containers (ul/ol/blockquote…)
+// não criam quebras próprias para não duplicar as dos seus filhos.
+const LEAF_BLOCKS = new Set([
+  'DIV', 'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+  'DT', 'DD', 'SECTION', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER',
+  'FIGURE', 'FIGCAPTION', 'ADDRESS',
+]);
 
-function readChildren(parent) {
+const LIST_MARKER = /^(\s*)(?:(?:\d+[.)])|[-*+])(\s+)(?:\[[ xX]\]\s+)?/;
+const QUOTE_MARKER = /^(\s*)>\s?/;
+const HEAD_MARKER = /^#{1,6}\s+/;
+const EMPTY_LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])(?:\s+\[[ xX]\])?\s*$/;
+
+const normalizeText = (value) => String(value ?? '').replace(/\r\n?/g, '\n');
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const nodeIndex = (node) => Array.prototype.indexOf.call(node.parentNode.childNodes, node);
+const beforeNode = (node) => ({ node: node.parentNode, offset: nodeIndex(node) });
+const afterNode = (node) => ({ node: node.parentNode, offset: nodeIndex(node) + 1 });
+
+/* ------------------------------ leitura do DOM ------------------------------ */
+// `boundary` = { node, offset } de um caret: a leitura para nesse ponto.
+// `segments` permite mapear cada faixa do texto de volta para um nó de texto.
+function scan(root, boundary = null) {
   let text = '';
-  const nodes = parent.childNodes;
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
-    // O navegador deixa um <br> extra no final apenas para o cursor aparecer
-    // ("texto<br><br>"): esse último não é uma linha nova de verdade.
-      if (node.tagName === 'BR' && i === nodes.length - 1 && (text === '' || text.endsWith('\n'))) continue;
-    const isBlock = node.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.test(node.tagName);
-    // separa o bloco anterior do próximo sem duplicar quebras já existentes
-    if (isBlock && text && !text.endsWith('\n')) text += '\n';
-    text += readNode(node);
+  const segments = [];
+  let stopped = false;
+
+  const emit = (value, node = null, boundaryAt = null, chip = null) => {
+    if (!value || stopped) return;
+    const start = text.length;
+    text += value;
+    segments.push({ start, end: text.length, node, boundaryAt, chip });
+  };
+  const atLineStart = () => text === '' || text.endsWith('\n');
+  const isFinalDescendant = (node) => {
+    let current = node;
+    while (current !== root && current.parentNode && current === current.parentNode.lastChild) {
+      current = current.parentNode;
+    }
+    return current === root;
+  };
+
+  function visit(node) {
+    if (stopped) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const data = normalizeText(node.data);
+      const chip = node.parentElement?.classList?.contains('mention-tag') ? node.parentElement : null;
+      if (boundary && boundary.node === node) {
+        const upTo = normalizeText(node.data.slice(0, boundary.offset)).length;
+        emit(data.slice(0, upTo), node, null, chip);
+        stopped = true;
+      } else {
+        emit(data, node, null, chip);
+      }
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    // Texto fantasma da sugestão da IA nunca faz parte do documento.
+    if (node.classList.contains('ghost-suggestion')) {
+      if (boundary && (boundary.node === node || node.contains(boundary.node))) stopped = true;
+      return;
+    }
+
+    if (node.tagName === 'BR') {
+      const isTail = node.classList.contains(TAIL_BR_CLASS);
+      // Chrome deixa um <br> extra só para o cursor aparecer. Ele não é uma
+      // linha nova de verdade (e era a origem das linhas vazias fantasmas).
+      const isPhantom = !isTail && isFinalDescendant(node)
+        && (atLineStart() || LEAF_BLOCKS.has(node.parentNode.tagName));
+      if (isTail || isPhantom) {
+        if (boundary && (
+          boundary.node === node
+          || (boundary.node === node.parentNode && boundary.offset > nodeIndex(node))
+        )) stopped = true;
+        return;
+      }
+      emit('\n', null, () => beforeNode(node));
+      return;
+    }
+
+    const children = node.childNodes;
+    const limit = boundary?.node === node ? Math.min(boundary.offset, children.length) : children.length;
+    const isLeaf = LEAF_BLOCKS.has(node.tagName);
+    // separa o bloco anterior deste sem duplicar uma quebra já existente
+    if (isLeaf && !atLineStart()) emit('\n', null, () => beforeNode(node));
+    let previousWasLeaf = false;
+    for (let i = 0; i < limit; i++) {
+      if (stopped) break;
+      const child = children[i];
+      if (previousWasLeaf && !atLineStart()) emit('\n', null, () => beforeNode(child));
+      visit(child);
+      previousWasLeaf = child.nodeType === Node.ELEMENT_NODE && LEAF_BLOCKS.has(child.tagName);
+    }
+    if (boundary?.node === node) stopped = true;
   }
-  return text;
+
+  visit(root);
+  return { text, segments };
 }
 
 export function readEditor(editor) {
-  return readChildren(editor);
+  return scan(editor).text;
 }
+
+export function caretOffsets(editor) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  const inside = (node) => node === editor || editor.contains(node);
+  if (!inside(range.startContainer) || !inside(range.endContainer)) return null;
+  const start = scan(editor, { node: range.startContainer, offset: range.startOffset }).text.length;
+  const end = scan(editor, { node: range.endContainer, offset: range.endOffset }).text.length;
+  return { start: Math.min(start, end), end: Math.max(start, end) };
+}
+
+function placeCaret(editor, caret) {
+  if (!caret) return;
+  const { text, segments } = scan(editor);
+  const total = text.length;
+  const start = clamp(caret.start, 0, total);
+  const end = clamp(caret.end ?? start, 0, total);
+  const tail = editor.lastChild?.nodeType === Node.ELEMENT_NODE
+    && editor.lastChild.classList.contains(TAIL_BR_CLASS) ? editor.lastChild : null;
+
+  const locate = (target) => {
+    // Fim de texto que termina em "\n": o cursor fica ANTES do <br> sentinela,
+    // que é justamente a linha vazia visível no fim do documento.
+    if (tail && target === total && text.endsWith('\n')) {
+      return { node: editor, offset: nodeIndex(tail) };
+    }
+    for (const segment of segments) {
+      if (target < segment.start || target > segment.end) continue;
+      if (segment.node && !segment.chip) {
+        return { node: segment.node, offset: clamp(target - segment.start, 0, segment.node.data.length) };
+      }
+      // Chip de @menção é atômico: o cursor fica antes ou depois dele.
+      if (segment.chip) {
+        const middle = segment.start + (segment.end - segment.start) / 2;
+        return target <= middle ? beforeNode(segment.chip) : afterNode(segment.chip);
+      }
+      if (segment.boundaryAt) return segment.boundaryAt();
+    }
+    const last = [...segments].reverse().find((segment) => segment.node && !segment.chip);
+    return last
+      ? { node: last.node, offset: last.node.data.length }
+      : { node: editor, offset: editor.childNodes.length };
+  };
+
+  const from = locate(start);
+  const to = locate(end);
+  const range = document.createRange();
+  try {
+    range.setStart(from.node, from.offset);
+    range.setEnd(to.node, to.offset);
+  } catch {
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+/* ----------------------------- escrita do DOM ------------------------------ */
 
 export function makeChip(name) {
   const chip = document.createElement('span');
@@ -52,46 +189,30 @@ export function makeChip(name) {
   return chip;
 }
 
-function caretOffset(editor) {
-  const offsets = selectionOffsets(editor);
-  return offsets ? { start: offsets.start, end: offsets.end } : null;
+export function fenceFor(content = '') {
+  const runs = String(content).match(/`+/g) || [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return '`'.repeat(Math.max(3, longest + 1));
 }
 
-function placeCaret(editor, saved) {
-  if (saved == null) return;
-  const offset = typeof saved === 'object' ? saved.start : saved;
-  const endOffset = typeof saved === 'object' ? saved.end : saved;
-  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  const locate = (target) => {
-    let remaining = target;
-    for (const node of nodes) {
-      if (remaining <= node.textContent.length) return { node, offset: remaining };
-      remaining -= node.textContent.length;
-    }
-    const last = nodes[nodes.length - 1];
-    return last ? { node: last, offset: last.textContent.length } : null;
-  };
-  const from = locate(offset);
-  const to = locate(endOffset);
-  const selection = window.getSelection();
-  if (from && to) {
-    const range = document.createRange();
-    range.setStart(from.node, from.offset);
-    range.setEnd(to.node, to.offset);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    return;
-  }
-  const end = document.createRange();
-  end.selectNodeContents(editor);
-  end.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(end);
+function fenceOpen(line) {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) return null;
+  const marker = match[1];
+  // info string de cerca com crases não contém crases
+  if (marker[0] === '`' && match[2].includes('`')) return null;
+  return { char: marker[0], length: marker.length };
 }
 
-const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|\*[^*\n]+\*|_[^_\n]+_)|(`[^`\n]+`)|(\[[^\]\n]+\]\([^)\n]+\))|(\$(?=\S)[^$\n]*?\S\$(?!\d))|(https?:\/\/[^\s<>()]+)/g;
+function fenceClose(line, fence) {
+  if (!fence) return false;
+  const char = fence.char === '`' ? '`' : '~';
+  return new RegExp(`^ {0,3}${char}{${fence.length},}\\s*$`).test(line);
+}
+
+// Formatação inline: código e links vêm primeiro para não serem reprocessados
+// por ênfase; "_" só delimita itálico fora de palavras.
+const INLINE_RE = /(`+[^`\n]*?`+)|(\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|\*[^*\n]+\*|(?<![\p{L}\p{N}])_[^_\n]+_(?![\p{L}\p{N}]))|(\[[^\]\n]+\]\([^)\s]+\))|(\$(?=\S)[^$\n]*?\S\$(?!\d))|(https?:\/\/[^\s<>()]+)/gu;
 
 function appendInline(parent, text) {
   INLINE_RE.lastIndex = 0;
@@ -100,9 +221,12 @@ function appendInline(parent, text) {
   while ((match = INLINE_RE.exec(text)) !== null) {
     if (match.index > last) parent.appendChild(document.createTextNode(text.slice(last, match.index)));
     const span = document.createElement('span');
-    if (match[1]) span.className = (/^\*\*|^__/.test(match[1]) ? 'fmt-bold' : (/^~~/.test(match[1]) ? 'fmt-strike' : 'fmt-italic'));
-    else if (match[2]) span.className = 'fmt-code';
-    else if (match[3] || match[5]) span.className = 'fmt-link';
+    if (match[1]) span.className = 'fmt-code';
+    else if (match[2]) {
+      span.className = /^\*\*|^__/.test(match[2])
+        ? 'fmt-bold'
+        : (/^~~/.test(match[2]) ? 'fmt-strike' : 'fmt-italic');
+    } else if (match[3] || match[5]) span.className = 'fmt-link';
     else if (match[4]) span.className = 'fmt-math';
     span.textContent = match[0];
     parent.appendChild(span);
@@ -111,249 +235,719 @@ function appendInline(parent, text) {
   if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
 }
 
-function blockSpan(className, text) {
-  const span = document.createElement('span');
-  span.className = className;
-  appendInline(span, text);
-  return span;
+function makeMentionRe(names) {
+  const sorted = [...new Set(names)].filter(Boolean).sort((a, b) => b.length - a.length);
+  if (!sorted.length) return null;
+  const escaped = sorted.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`@(${escaped.join('|')})(?![\p{L}\p{N}_])`, 'gu');
 }
 
-function lineClass(line) {
-  if (/^#{1,6}\s/.test(line)) return `editor-heading editor-h${Math.min(6, line.match(/^#+/)[0].length)}`;
-  if (/^\s*([-*+]|\d+\.)\s/.test(line) || /^\s*-\s\[[ xX]\]/.test(line)) return 'editor-list';
-  if (/^>\s?/.test(line)) return 'editor-quote';
-  if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return 'editor-hr';
-  if (/^\|.*\|\s*$/.test(line)) return 'editor-table';
+function appendWithMentions(parent, text, mentionRe) {
+  if (!mentionRe) { appendInline(parent, text); return; }
+  mentionRe.lastIndex = 0;
+  let last = 0;
+  let match;
+  while ((match = mentionRe.exec(text)) !== null) {
+    if (match.index > last) appendInline(parent, text.slice(last, match.index));
+    parent.appendChild(makeChip(match[1]));
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) appendInline(parent, text.slice(last));
+}
+
+// Classes de BLOCO aplicadas em <span> INLINE: as quebras de linha continuam
+// sendo apenas os "\n" do texto. (Com display:block havia uma quebra visual
+// extra de cada lado -> linhas vazias indevidas.)
+function lineClasses(line) {
+  const heading = /^(#{1,6})(?:\s+|$)/.exec(line);
+  if (heading) return ['editor-heading', `editor-h${heading[1].length}`];
+
+  const list = /^(\s*)([-*+]|\d+[.)])(\s+)(\[[ xX]\]\s+)?/.exec(line);
+  if (list) {
+    const spaces = list[1].replace(/\t/g, '  ').length;
+    const level = Math.min(5, Math.floor(spaces / 2));
+    return [
+      'editor-list',
+      ...(level ? [`editor-list-level-${level}`] : []),
+      ...(list[4] ? ['editor-task'] : []),
+    ];
+  }
+  if (/^\s*>/.test(line)) return ['editor-quote'];
+  if (/^ {0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return ['editor-hr'];
+  if (/^\s*\|.*\|\s*$/.test(line)) return ['editor-table'];
   return null;
 }
 
-export function writeEditor(editor, text = '', names = [], { preserveCaret = false } = {}) {
-  const savedCaret = preserveCaret ? caretOffset(editor) : null;
+function appendLine(parent, line, mentionRe) {
+  if (!line) return;
+  const classes = lineClasses(line);
+  if (!classes) { appendWithMentions(parent, line, mentionRe); return; }
+  const span = document.createElement('span');
+  span.className = classes.join(' ');
+  appendWithMentions(span, line, mentionRe);
+  parent.appendChild(span);
+}
+
+export function writeEditor(editor, text = '', names = [], options = {}) {
+  const value = normalizeText(text);
+  const caret = options.caret ?? (options.preserveCaret ? caretOffsets(editor) : null);
   editor.innerHTML = '';
   const fragment = document.createDocumentFragment();
+  const lines = value.split('\n');
 
-  // 1) separa blocos de código cercados (``` ... ```) — sem formatação interna.
+  // Agrupa cercas de código (``` ou ~~~) como uma única unidade: o conteúdo
+  // interno fica cru, inclusive as quebras, sem formatação inline.
   const units = [];
-  const fenceRe = /(```[\s\S]*?(?:```|$))/g;
-  let fenceMatch;
-  let lastFence = 0;
-  const pushTextWithMentions = (chunk) => {
-    if (!chunk) return;
-    const sorted = [...names].sort((a, b) => b.length - a.length);
-    if (!sorted.length) { units.push({ kind: 'text', text: chunk }); return; }
-    const escaped = sorted.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const mentionRe = new RegExp(`@(${escaped.join('|')})`, 'g');
-    let last = 0;
-    let m;
-    while ((m = mentionRe.exec(chunk)) !== null) {
-      if (m.index > last) units.push({ kind: 'text', text: chunk.slice(last, m.index) });
-      units.push({ kind: 'chip', text: m[1] });
-      last = m.index + m[0].length;
-    }
-    if (last < chunk.length) units.push({ kind: 'text', text: chunk.slice(last) });
-  };
-  while ((fenceMatch = fenceRe.exec(text)) !== null) {
-    pushTextWithMentions(text.slice(lastFence, fenceMatch.index));
-    units.push({ kind: 'code', text: fenceMatch[1] });
-    lastFence = fenceMatch.index + fenceMatch[1].length;
-  }
-  pushTextWithMentions(text.slice(lastFence));
-
-  // 2) converte unidades em nós, com estilos simples de bloco/inline.
-  let atLineStart = true;
-  for (const unit of units) {
-    if (unit.kind === 'chip') {
-      fragment.appendChild(makeChip(unit.text));
-      atLineStart = false;
+  for (let i = 0; i < lines.length;) {
+    const open = fenceOpen(lines[i]);
+    if (!open) {
+      units.push({ kind: 'line', lines: [lines[i]] });
+      i += 1;
       continue;
     }
+    const group = [lines[i]];
+    let closed = false;
+    i += 1;
+    while (i < lines.length) {
+      group.push(lines[i]);
+      if (fenceClose(lines[i], open)) { i += 1; closed = true; break; }
+      i += 1;
+    }
+    units.push({ kind: 'code', lines: group, closed });
+  }
+
+  const mentionRe = makeMentionRe(names);
+  units.forEach((unit, index) => {
+    if (index > 0) fragment.appendChild(document.createTextNode('\n'));
     if (unit.kind === 'code') {
       const span = document.createElement('span');
-      span.className = 'editor-codeblock';
-      span.textContent = unit.text;
+      span.className = unit.closed ? 'editor-codeblock' : 'editor-codeblock editor-codeblock--open';
+      span.textContent = unit.lines.join('\n');
       fragment.appendChild(span);
-      atLineStart = true;
-      continue;
+    } else {
+      appendLine(fragment, unit.lines[0], mentionRe);
     }
-    const parts = unit.text.split('\n');
-    parts.forEach((part, i) => {
-      if (i > 0) {
-        fragment.appendChild(document.createTextNode('\n'));
-        atLineStart = true;
-      }
-      if (!part) return;
-      const cls = atLineStart ? lineClass(part) : null;
-      if (cls) fragment.appendChild(blockSpan(cls, part));
-      else appendInline(fragment, part);
-      atLineStart = false;
-    });
-  }
+  });
 
   editor.appendChild(fragment);
-  ensureTrailingBreak(editor);
-  if (savedCaret != null) placeCaret(editor, savedCaret);
-}
-
-// Em pre-wrap, uma quebra no fim do documento não aparece (o cursor ficaria no
-// fim da linha anterior). Um <br> no final cria a linha vazia de verdade.
-function ensureTrailingBreak(editor) {
-  const last = editor.lastChild;
-  if (!last) { editor.appendChild(document.createElement('br')); return; }
-  if (last.nodeName === 'BR') return;
-  const text = last.textContent || '';
-  if (text.endsWith('\n')) editor.appendChild(document.createElement('br'));
-}
-
-export function insertText(editor, text, { selectFrom, selectTo } = {}) {
-  const selection = window.getSelection();
-  let node;
-  if (selection?.rangeCount && editor.contains(selection.getRangeAt(0).startContainer)) {
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    node = document.createTextNode(text);
-    range.insertNode(node);
-    const caret = document.createRange();
-    caret.setStart(node, text.length);
-    caret.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(caret);
-  } else {
-    node = document.createTextNode(text);
-    editor.appendChild(node);
+  if (value.endsWith('\n')) {
+    const tail = document.createElement('br');
+    tail.className = TAIL_BR_CLASS;
+    editor.appendChild(tail);
   }
-  ensureTrailingBreak(editor);
-  editor.focus();
+  if (caret) placeCaret(editor, caret);
+}
 
-  if (Number.isInteger(selectFrom)) {
-    const range = document.createRange();
-    range.setStart(node, selectFrom);
-    range.setEnd(node, Number.isInteger(selectTo) ? selectTo : text.length);
-    const selectionAfter = window.getSelection();
-    selectionAfter.removeAllRanges();
-    selectionAfter.addRange(range);
+/* --------------------------- edições sobre o modelo --------------------------- */
+
+function prevChar(text, position) {
+  if (position <= 0) return 0;
+  let index = position - 1;
+  const low = text.charCodeAt(index);
+  if (low >= 0xdc00 && low <= 0xdfff && index > 0) {
+    const high = text.charCodeAt(index - 1);
+    if (high >= 0xd800 && high <= 0xdbff) return index - 1;
   }
-
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
-  return node;
+  return index;
 }
 
-export function wrapSelection(editor, prefix, suffix = '', placeholder = '') {
-  const selection = window.getSelection();
-  const selected = selection?.toString() || placeholder;
-  insertText(editor, `${prefix}${selected}${suffix}`, {
-    selectFrom: prefix.length,
-    selectTo: prefix.length + selected.length,
-  });
+function nextChar(text, position) {
+  if (position >= text.length) return text.length;
+  const high = text.charCodeAt(position);
+  let index = position + 1;
+  if (high >= 0xd800 && high <= 0xdbff && index < text.length) {
+    const low = text.charCodeAt(index);
+    if (low >= 0xdc00 && low <= 0xdfff) index += 1;
+  }
+  return index;
 }
 
-function selectionOffsets(editor) {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || !editor.contains(selection.getRangeAt(0).startContainer)) return null;
-  const range = selection.getRangeAt(0);
-  const offsetOf = (node, offset) => {
-    const pre = range.cloneRange();
-    pre.selectNodeContents(editor);
-    pre.setEnd(node, offset);
-    return pre.toString().length;
-  };
+function wordBackward(text, position) {
+  let index = position;
+  while (index > 0 && /[ \t]/.test(text[index - 1])) index -= 1;
+  if (index > 0 && text[index - 1] === '\n') return index - 1;
+  while (index > 0 && !/\s/.test(text[index - 1])) index -= 1;
+  return index;
+}
+
+function wordForward(text, position) {
+  let index = position;
+  while (index < text.length && /[ \t]/.test(text[index])) index += 1;
+  if (index < text.length && text[index] === '\n') return index + 1;
+  while (index < text.length && !/\s/.test(text[index])) index += 1;
+  return index;
+}
+
+function replace(text, from, to, value, caret) {
   return {
-    start: offsetOf(range.startContainer, range.startOffset),
-    end: offsetOf(range.endContainer, range.endOffset),
-    range,
+    text: text.slice(0, from) + value + text.slice(to),
+    caret,
   };
 }
 
-function rangeFromOffsets(editor, start, end) {
-  const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  const locate = (target) => {
-    let remaining = target;
-    for (const node of nodes) {
-      if (remaining <= node.textContent.length) return { node, offset: remaining };
-      remaining -= node.textContent.length;
+function editForInput(text, caret, type, event) {
+  const { start, end } = caret;
+  const data = event.dataTransfer?.getData('text/plain');
+  const insertions = {
+    insertText: event.data ?? data ?? '',
+    insertReplacementText: event.data ?? data ?? '',
+    insertFromPasteWithoutFormatting: data ?? event.data ?? '',
+    insertLineBreak: '\n',
+    insertParagraph: '\n',
+  };
+  if (Object.prototype.hasOwnProperty.call(insertions, type)) {
+    const value = normalizeText(insertions[type]);
+    if (!value) return null; // sem dados: não mexe na seleção
+    const position = start + value.length;
+    return replace(text, start, end, value, position);
+  }
+
+  switch (type) {
+    case 'deleteContentBackward': {
+      if (start !== end) return replace(text, start, end, '', start);
+      const from = prevChar(text, start);
+      return replace(text, from, start, '', from);
     }
-    const last = nodes[nodes.length - 1];
-    return last ? { node: last, offset: last.textContent.length } : null;
-  };
-  const from = locate(start);
-  const to = locate(end);
-  if (!from || !to) return null;
-  const range = document.createRange();
-  range.setStart(from.node, from.offset);
-  range.setEnd(to.node, to.offset);
-  return range;
+    case 'deleteContentForward': {
+      if (start !== end) return replace(text, start, end, '', start);
+      const to = nextChar(text, start);
+      return replace(text, start, to, '', start);
+    }
+    case 'deleteWordBackward': {
+      const from = start === end ? wordBackward(text, start) : start;
+      return replace(text, from, end, '', from);
+    }
+    case 'deleteWordForward': {
+      const to = start === end ? wordForward(text, start) : end;
+      return replace(text, start, to, '', start);
+    }
+    case 'deleteSoftLineBackward':
+    case 'deleteHardLineBackward': {
+      const from = start === end ? text.lastIndexOf('\n', start - 1) + 1 : start;
+      return replace(text, from, end, '', from);
+    }
+    case 'deleteSoftLineForward':
+    case 'deleteHardLineForward': {
+      const newline = text.indexOf('\n', end);
+      const to = newline === -1 ? text.length : newline + 1;
+      return replace(text, start, to, '', start);
+    }
+    case 'deleteEntireSoftLine': {
+      const from = text.lastIndexOf('\n', start - 1) + 1;
+      const newline = text.indexOf('\n', end);
+      const to = newline === -1 ? text.length : newline + 1;
+      return replace(text, from, to, '', from);
+    }
+    case 'deleteByCut':
+    case 'deleteContent':
+    case 'deleteByDrag':
+      return replace(text, start, end, '', start);
+    default:
+      return null; // tipo desconhecido: deixa nativo e normaliza no input
+  }
 }
 
-function replaceRange(editor, start, end, text) {
-  const range = rangeFromOffsets(editor, start, end);
-  if (!range) return;
-  const selection = window.getSelection();
-  selection.removeAllRanges();
-  selection.addRange(range);
-  insertText(editor, text);
+// Intervalos linha a linha dos blocos cerca (``` ... ```), usados para
+// desfazer a formatação mesmo quando o cursor está DENTRO do bloco.
+function fenceRanges(text) {
+  const lines = text.split('\n');
+  const offsets = [];
+  let cursor = 0;
+  for (const line of lines) { offsets.push(cursor); cursor += line.length + 1; }
+  const ranges = [];
+  let open = null;
+  let openLine = -1;
+  lines.forEach((line, index) => {
+    if (open) {
+      if (fenceClose(line, open)) {
+        ranges.push({ openLine, closeLine: index, start: offsets[openLine], end: Math.min(text.length, offsets[index + 1] ?? text.length) });
+        open = null;
+      }
+    } else {
+      const found = fenceOpen(line);
+      if (found) { open = found; openLine = index; }
+    }
+  });
+  // Cerca sem fechamento vai até o fim do documento (é assim que marked lê).
+  if (open) ranges.push({ openLine, closeLine: lines.length - 1, start: offsets[openLine], end: text.length, unterminated: true });
+  return { lines, offsets, ranges };
 }
 
-// Liga/desliga a formatação: clicar de novo no mesmo botão remove os marcadores,
-// em vez de empilhar asteriscos (****texto****).
-export function toggleWrap(editor, prefix, suffix = '', placeholder = '') {
-  const info = selectionOffsets(editor);
-  const text = editor.textContent;
-  if (!info) {
-    insertText(editor, `${prefix}${placeholder}${suffix}`, {
-      selectFrom: prefix.length,
-      selectTo: prefix.length + placeholder.length,
+// Retorna o intervalo do bloco cerca que contém `position`, ou null.
+export function codeBlockAt(text, position) {
+  return fenceRanges(normalizeText(text)).ranges.find(
+    (range) => position >= range.start && position <= range.end,
+  ) || null;
+}
+
+function continuationFor(line) {
+  const ordered = /^(\s*)(\d+)([.)])(\s+)/.exec(line);
+  if (ordered) return `${ordered[1]}${Number(ordered[2]) + 1}${ordered[3]}${ordered[4]}`;
+  const task = /^(\s*)([-*+])(\s+)\[[ xX]\]\s+/.exec(line);
+  if (task) return `${task[1]}${task[2]}${task[3]}[ ] `;
+  const bullet = /^(\s*)([-*+])(\s+)/.exec(line);
+  if (bullet) return `${bullet[1]}${bullet[2]}${bullet[3]}`;
+  const quote = /^((?:\s*>\s?)+)/.exec(line);
+  if (quote) return quote[1];
+  const indent = /^([ \t]+)\S/.exec(line);
+  if (indent) return indent[1];
+  return '';
+}
+
+/* ------------------------- melhoria local do prompt ------------------------- */
+// Limpeza determinística e opcional (botão "Melhorar prompt" sem IA local).
+// Nunca toca no conteúdo de blocos de código cercados e nunca cria linhas em
+// branco dentro de listas/citações.
+export function improvePromptText(source = '') {
+  const lines = normalizeText(source).split('\n');
+  const result = [];
+  let fence = null;
+  let blankRun = 0;
+  let blankAfterFence = false;
+
+  for (const raw of lines) {
+    if (fence) {
+      result.push(raw); // código: preserva exatamente, inclusive espaços
+      if (fenceClose(raw, fence)) { fence = null; blankAfterFence = true; }
+      continue;
+    }
+    const open = fenceOpen(raw);
+    if (open) {
+      fence = open;
+      if (result.length && result[result.length - 1] !== '') result.push('');
+      result.push(raw);
+      blankRun = 0;
+      continue;
+    }
+
+    let line = raw.replace(/[ \t]+$/, '');
+    line = line.replace(/^(#{1,6})(?=[^\s#])/, '$1 ');
+    line = line.replace(/^(\s*)([-*+]|\d+[.)])(?=[^\s])/, '$1$2 ');
+    line = line.replace(/^(\s*)>(?=[^\s>])/, '$1> ');
+
+    if (!line.trim()) {
+      blankRun += 1;
+      if (blankRun > 1) continue; // no máximo UMA linha em branco
+      result.push('');
+      continue;
+    }
+    blankRun = 0;
+    if (blankAfterFence && result[result.length - 1] !== '') result.push('');
+    blankAfterFence = false;
+    result.push(line);
+  }
+
+  while (result.length && !result[result.length - 1].trim()) result.pop();
+  const body = result.join('\n');
+  return body ? `${body}\n` : '';
+}
+
+/* --------------------------------- controlador -------------------------------- */
+
+export class MarkdownEditor {
+  constructor({
+    element,
+    getNames = () => [],
+    onCommit = () => {},
+    onHistory = () => {},
+    onFormat = () => {},
+    onEditStart = () => {},
+  }) {
+    this.element = element;
+    this.getNames = getNames;
+    this.onCommit = onCommit;
+    this.onHistory = onHistory;
+    this.onFormat = onFormat;
+    this.onEditStart = onEditStart;
+    this.composing = false;
+    this.selfDispatch = false;
+    this.attach();
+  }
+
+  get text() { return readEditor(this.element); }
+  get caret() { return caretOffsets(this.element); }
+  get names() { return this.getNames() || []; }
+
+  attach() {
+    const element = this.element;
+    element.addEventListener('beforeinput', (event) => this.onBeforeInput(event));
+    element.addEventListener('input', (event) => this.onInput(event));
+    element.addEventListener('compositionstart', () => { this.composing = true; });
+    element.addEventListener('compositionend', () => {
+      this.composing = false;
+      // Espera o input final da composição antes de reconstruir o DOM.
+      setTimeout(() => this.normalizeFromDom(), 0);
     });
-    return;
+    element.addEventListener('keydown', (event) => this.onKeyDown(event));
+    element.addEventListener('paste', (event) => this.onPaste(event));
+    element.addEventListener('cut', (event) => this.onCut(event));
+    element.addEventListener('copy', (event) => this.onCopy(event));
+    element.addEventListener('drop', (event) => this.onDrop(event));
   }
-  const { start, end } = info;
-  const selected = text.slice(start, end);
-  // a seleção já inclui os marcadores: remove
-  if (selected.length > prefix.length + suffix.length && selected.startsWith(prefix) && selected.endsWith(suffix)) {
-    const inner = selected.slice(prefix.length, suffix.length ? -suffix.length : undefined);
-    replaceRange(editor, start, end, inner);
-    return;
+
+  // Escreve o modelo no DOM, reposiciona o caret e avisa a aplicação.
+  commit(text, caret = null, { notify = true } = {}) {
+    const value = normalizeText(text);
+    const bounds = caret ? {
+      start: clamp(caret.start, 0, value.length),
+      end: clamp(caret.end ?? caret.start, 0, value.length),
+    } : null;
+    if (bounds && document.activeElement !== this.element) {
+      this.element.focus({ preventScroll: true });
+    }
+    writeEditor(this.element, value, this.names, { caret: bounds });
+    this.onCommit({ text: value, caret: bounds });
+    if (notify) {
+      this.selfDispatch = true;
+      this.element.dispatchEvent(new Event('input', { bubbles: true }));
+      this.selfDispatch = false;
+    }
   }
-  // os marcadores estão logo fora da seleção: remove
-  if (suffix && text.slice(start - prefix.length, start) === prefix && text.slice(end, end + suffix.length) === suffix) {
-    replaceRange(editor, start - prefix.length, end + suffix.length, selected);
-    return;
+
+  normalizeFromDom() {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    this.commit(text, caret, { notify: false });
   }
-  // prefixo sem sufixo (título): remove se está logo antes da seleção
-  if (!suffix && text.slice(start - prefix.length, start) === prefix) {
-    replaceRange(editor, start - prefix.length, end, selected);
-    return;
+
+  onInput(event) {
+    if (this.selfDispatch || this.composing || event.isComposing) return;
+    this.normalizeFromDom();
   }
-  // cursor (sem seleção) dentro de um trecho já marcado: desmarca o trecho
-  if (start === end && suffix) {
-    const standalone = (pos, marker) => text[pos - 1] !== marker[0] && text[pos + marker.length] !== marker[0];
-    const openIdx = text.lastIndexOf(prefix, start - 1);
-    const closeIdx = text.indexOf(suffix, end);
-    if (openIdx !== -1 && closeIdx !== -1 && standalone(openIdx, prefix) && standalone(closeIdx, suffix)) {
-      replaceRange(editor, openIdx, closeIdx + suffix.length, text.slice(openIdx + prefix.length, closeIdx));
+
+  onBeforeInput(event) {
+    const type = event.inputType;
+    if (this.composing || event.isComposing
+      || type === 'insertCompositionText' || type === 'deleteCompositionText') return;
+
+    if (type === 'historyUndo' || type === 'historyRedo') {
+      event.preventDefault();
+      this.onHistory(type === 'historyUndo' ? 'undo' : 'redo');
       return;
     }
-  }
-  wrapSelection(editor, prefix, suffix, placeholder || selected);
-}
+    if (type.startsWith('format')) {
+      event.preventDefault();
+      this.onFormat(type);
+      return;
+    }
+    // paste/cut/drop têm eventos próprios, com acesso ao clipboard/drag data
+    if (type === 'insertFromPaste' || type === 'insertFromDrop' || type === 'deleteByCut') return;
 
-// Liga/desliga um prefixo de linha (- , > ): clicar de novo remove das linhas.
-export function toggleLinePrefix(editor, prefix) {
-  const info = selectionOffsets(editor);
-  const text = editor.textContent;
-  if (!info) {
-    insertText(editor, prefix);
-    return;
-  }
-  const lineStart = text.lastIndexOf('\n', info.start - 1) + 1;
-  const lineEndIdx = text.indexOf('\n', info.end);
-  const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
-  const lines = text.slice(lineStart, lineEnd).split('\n');
-  const has = lines.some((l) => l.startsWith(prefix));
-  const next = lines.map((l) => (l.startsWith(prefix) ? l.slice(prefix.length) : (has ? l : prefix + l))).join('\n');
-  replaceRange(editor, lineStart, lineEnd, next);
-}
+    const caret = this.caret;
+    if (!caret) return;
+    const text = this.text;
+    const edit = editForInput(text, caret, type, event);
+    if (!edit) return; // tipo não mapeado: nativo + normalização no input
 
-export function insertSnippet(editor, text) {
-  insertText(editor, text);
+    event.preventDefault();
+    this.onEditStart();
+    this.commit(edit.text, { start: edit.caret, end: edit.caret }, { notify: true });
+  }
+
+  onKeyDown(event) {
+    // Outros listeners (atalhos, IA, dropdown de @) têm prioridade.
+    if (event.defaultPrevented || this.composing || event.isComposing || event.keyCode === 229) return;
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      this.onEditStart();
+      this.indent(event.shiftKey ? -1 : 1);
+      return;
+    }
+    if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      event.preventDefault();
+      this.onEditStart();
+      this.newLine(true);
+    }
+  }
+
+  onPaste(event) {
+    event.preventDefault();
+    const text = normalizeText(event.clipboardData?.getData('text/plain') || '');
+    if (text) this.insert(text);
+  }
+
+  onCopy(event) {
+    const caret = this.caret;
+    if (!caret || caret.start === caret.end) return;
+    const selected = this.text.slice(caret.start, caret.end);
+    event.clipboardData?.setData('text/plain', selected);
+    event.preventDefault();
+  }
+
+  onCut(event) {
+    // Só garante que o texto copiado é o modelo canônico. A exclusão fica com
+    // o navegador e é normalizada no evento input (evita apagar duas vezes).
+    const caret = this.caret;
+    if (!caret || caret.start === caret.end) return;
+    const selected = this.text.slice(caret.start, caret.end);
+    event.clipboardData?.setData('text/plain', selected);
+  }
+
+  onDrop(event) {
+    event.preventDefault();
+    const text = normalizeText(event.dataTransfer?.getData('text/plain') || '');
+    if (!text) return;
+    const range = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+    if (range && (range.startContainer === this.element || this.element.contains(range.startContainer))) {
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    this.insert(text);
+  }
+
+  /* ------------------------------- primitives ------------------------------- */
+
+  replaceRange(start, end, value, caret = null) {
+    const text = this.text;
+    const from = clamp(start, 0, text.length);
+    const to = clamp(end, from, text.length);
+    const inserted = normalizeText(value);
+    const position = from + inserted.length;
+    this.commit(
+      text.slice(0, from) + inserted + text.slice(to),
+      caret ?? { start: position, end: position },
+      { notify: true },
+    );
+  }
+
+  insert(value, options = {}) {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const inserted = normalizeText(value);
+    const next = text.slice(0, caret.start) + inserted + text.slice(caret.end);
+    const base = caret.start;
+    const bounds = Number.isInteger(options.selectFrom) ? {
+      start: base + clamp(options.selectFrom, 0, inserted.length),
+      end: base + clamp(options.selectTo ?? inserted.length, 0, inserted.length),
+    } : { start: base + inserted.length, end: base + inserted.length };
+    this.commit(next, bounds, { notify: true });
+  }
+
+  newLine(smart = false) {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    if (!smart) { this.replaceRange(caret.start, caret.end, '\n'); return; }
+
+    const lineStart = text.lastIndexOf('\n', caret.start - 1) + 1;
+    const before = text.slice(lineStart, caret.start);
+    const nextBreak = text.indexOf('\n', caret.end);
+    const after = text.slice(caret.end, nextBreak === -1 ? text.length : nextBreak);
+
+    // Item de lista vazio + Enter = sai da lista (sem linha em branco extra).
+    if (EMPTY_LIST_ITEM.test(before) && !after.trim()) {
+      this.replaceRange(lineStart, caret.end, '');
+      return;
+    }
+    let value = '\n';
+    if (!after.trim()) {
+      const continuation = continuationFor(before);
+      if (continuation) value = `\n${continuation}`;
+    }
+    this.replaceRange(caret.start, caret.end, value);
+  }
+
+  // Tab / Shift+Tab: 2 espaços por nível. Em seleção multilinha, indenta ou
+  // recua todas as linhas — é assim que se cria/remove o aninhamento de listas.
+  indent(direction) {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const from = text.lastIndexOf('\n', caret.start - 1) + 1;
+    const searchFrom = caret.end > caret.start ? caret.end - 1 : caret.start;
+    const breakIndex = text.indexOf('\n', searchFrom);
+    const to = breakIndex === -1 ? text.length : breakIndex;
+    const lines = text.slice(from, to).split('\n');
+
+    // Cursor parado no meio de uma linha comum: Tab insere 2 espaços.
+    // Em linha de lista/citação/título (ou na indentação), Tab recua a linha
+    // inteira — é assim que se cria o aninhamento.
+    if (caret.start === caret.end && direction > 0 && lines.length === 1) {
+      const line = lines[0];
+      const inIndent = /^[ \t]*$/.test(line.slice(0, caret.start - from));
+      if (!inIndent && !LIST_MARKER.test(line) && !QUOTE_MARKER.test(line) && !HEAD_MARKER.test(line)) {
+        this.replaceRange(caret.start, caret.end, '  ');
+        return;
+      }
+    }
+
+    const changedLines = lines.map((line) => {
+      if (!line.trim()) return line;
+      return direction > 0 ? `  ${line}` : line.replace(/^(?: {1,2}|\t)/, '');
+    });
+    const changed = changedLines.join('\n');
+    if (changed === lines.join('\n')) return;
+    const deltaFirst = changedLines[0].length - lines[0].length;
+    const position = clamp(caret.start + deltaFirst, from, from + changed.length);
+    const bounds = caret.start === caret.end
+      ? { start: position, end: position }
+      : { start: from, end: from + changed.length };
+    this.commit(
+      text.slice(0, from) + changed + text.slice(to),
+      bounds,
+      { notify: true },
+    );
+  }
+
+  transformLines(transform) {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const from = text.lastIndexOf('\n', caret.start - 1) + 1;
+    const searchFrom = caret.end > caret.start ? caret.end - 1 : caret.start;
+    const breakIndex = text.indexOf('\n', searchFrom);
+    const to = breakIndex === -1 ? text.length : breakIndex;
+    const lines = text.slice(from, to).split('\n');
+    const changed = transform(lines);
+    if (!changed || changed.join('\n') === lines.join('\n')) return;
+    const replacement = changed.join('\n');
+    const delta = changed[0].length - lines[0].length;
+    const position = clamp(caret.start + delta, from, from + replacement.length);
+    const bounds = caret.start === caret.end
+      ? { start: position, end: position }
+      : { start: from, end: from + replacement.length };
+    this.commit(text.slice(0, from) + replacement + text.slice(to), bounds, { notify: true });
+  }
+
+  /* ------------------------------- formatação ------------------------------- */
+
+  wrapSelection(prefix, suffix = '', placeholder = '') {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const body = text.slice(caret.start, caret.end) || placeholder;
+    const inserted = `${prefix}${body}${suffix}`;
+    const next = text.slice(0, caret.start) + inserted + text.slice(caret.end);
+    this.commit(next, {
+      start: caret.start + prefix.length,
+      end: caret.start + prefix.length + body.length,
+    }, { notify: true });
+  }
+
+  toggleWrap(prefix, suffix = '', placeholder = '') {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const { start, end } = caret;
+    const selected = text.slice(start, end);
+
+    // 1) a seleção já inclui os marcadores
+    if (selected.length > prefix.length + suffix.length
+      && selected.startsWith(prefix)
+      && (!suffix || selected.endsWith(suffix))) {
+      const inner = selected.slice(prefix.length, suffix ? -suffix.length : undefined);
+      this.commit(text.slice(0, start) + inner + text.slice(end),
+        { start, end: start + inner.length }, { notify: true });
+      return;
+    }
+    // 2) os marcadores estão logo fora da seleção
+    if (text.slice(Math.max(0, start - prefix.length), start) === prefix
+      && (!suffix || text.slice(end, end + suffix.length) === suffix)) {
+      const from = start - prefix.length;
+      const to = end + (suffix ? suffix.length : 0);
+      this.commit(text.slice(0, from) + selected + text.slice(to),
+        { start: from, end: from + selected.length }, { notify: true });
+      return;
+    }
+    // 3) cursor solto dentro de um trecho já marcado
+    if (start === end && suffix) {
+      const open = text.lastIndexOf(prefix, Math.max(0, start - 1));
+      const close = text.indexOf(suffix, start);
+      if (open !== -1 && close !== -1 && open + prefix.length <= start && close >= start) {
+        const inner = text.slice(open + prefix.length, close);
+        if (!inner.includes('\n')) {
+          const next = text.slice(0, open) + inner + text.slice(close + suffix.length);
+          this.commit(next, { start: open, end: open + inner.length }, { notify: true });
+          return;
+        }
+      }
+    }
+    // 4) aplica os marcadores
+    const body = selected || placeholder;
+    const inserted = `${prefix}${body}${suffix}`;
+    const next = text.slice(0, start) + inserted + text.slice(end);
+    this.commit(next, {
+      start: start + prefix.length,
+      end: start + prefix.length + body.length,
+    }, { notify: true });
+  }
+
+  toggleList() {
+    this.transformLines((lines) => {
+      const meaningful = lines.filter((line) => line.trim());
+      const all = meaningful.length > 0 && meaningful.every((line) => LIST_MARKER.test(line));
+      return lines.map((line) => {
+        if (!line.trim()) return line; // nunca transforma linha em branco em item
+        if (all) return line.replace(LIST_MARKER, '$1');
+        if (LIST_MARKER.test(line)) return line;
+        const indent = /^(\s*)/.exec(line)[1];
+        return `${indent}- ${line.slice(indent.length)}`;
+      });
+    });
+  }
+
+  toggleQuote() {
+    this.transformLines((lines) => {
+      const meaningful = lines.filter((line) => line.trim());
+      const all = meaningful.length > 0 && meaningful.every((line) => QUOTE_MARKER.test(line));
+      return lines.map((line) => {
+        if (!line.trim()) return line;
+        if (all) return line.replace(QUOTE_MARKER, '$1');
+        if (QUOTE_MARKER.test(line)) return line;
+        const indent = /^(\s*)/.exec(line)[1];
+        return `${indent}> ${line.slice(indent.length)}`;
+      });
+    });
+  }
+
+  // Título é um PREFIXO DE LINHA, não um "wrap": "## " no meio da linha não
+  // cria um título em markdown.
+  toggleHeading(level = 2) {
+    const marker = `${'#'.repeat(clamp(level, 1, 6))} `;
+    this.transformLines((lines) => {
+      const meaningful = lines.filter((line) => line.trim());
+      const all = meaningful.length > 0 && meaningful.every((line) => line.startsWith(marker));
+      return lines.map((line) => {
+        if (!line.trim()) return line;
+        if (all) return line.replace(HEAD_MARKER, '');
+        return marker + line.replace(HEAD_MARKER, '');
+      });
+    });
+  }
+
+  toggleCodeBlock(placeholder = 'cole o código aqui') {
+    const text = this.text;
+    const caret = this.caret ?? { start: text.length, end: text.length };
+    const { lines, ranges } = fenceRanges(text);
+
+    // Cursor/seleção dentro de uma cerca existente: remove as duas linhas da
+    // cerca, preservando exatamente o conteúdo (e qualquer indentação).
+    const enclosing = ranges.find((range) => caret.start >= range.start && caret.start <= range.end);
+    if (enclosing) {
+      const inner = enclosing.unterminated
+        ? lines.slice(enclosing.openLine + 1).join('\n')
+        : lines.slice(enclosing.openLine + 1, enclosing.closeLine).join('\n');
+      const next = text.slice(0, enclosing.start) + inner + text.slice(enclosing.end);
+      this.commit(next, { start: enclosing.start, end: enclosing.start + inner.length }, { notify: true });
+      return;
+    }
+
+    const from = text.lastIndexOf('\n', caret.start - 1) + 1;
+    const searchFrom = caret.end > caret.start ? caret.end - 1 : caret.start;
+    const breakIndex = text.indexOf('\n', searchFrom);
+    const to = breakIndex === -1 ? text.length : breakIndex;
+    const block = text.slice(from, to);
+
+    const body = block.trim() ? block : placeholder;
+    const fence = fenceFor(body);
+    const prefix = text.slice(0, from);
+    const suffix = to < text.length ? text.slice(to + 1) : '';
+    // Uma (e apenas uma) linha em branco separa a cerca do texto adjacente.
+    const before = from > 0 && prefix.replace(/\n+$/, '').length > 0 && !/\n\s*\n$/.test(prefix) ? '\n' : '';
+    const after = suffix.trim() && !/^\s*\n/.test(suffix) ? '\n' : '';
+    const inserted = `${before}${fence}\n${body}\n${fence}${after}`;
+    const next = text.slice(0, from) + inserted + text.slice(to);
+    const bodyStart = from + before.length + fence.length + 1;
+    this.commit(next, { start: bodyStart, end: bodyStart + body.length }, { notify: true });
+  }
+
+  insertSnippet(text) {
+    this.insert(text);
+  }
 }
